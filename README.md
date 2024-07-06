@@ -39,7 +39,6 @@ Open the 'ESP32-Artnet2DMX.ino' file.
 
 Click "Tools" -> "Manage Libraries.." then search and install :-
  - esp_dmx (Tested version 4.1.0)
- - ArtnetWifi (Tested version 1.6.1)
 
 Now connect the ESP32-S2 mini via USB to a PC.
 
