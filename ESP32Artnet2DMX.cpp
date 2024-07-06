@@ -3,7 +3,7 @@
 #include "ESP32Artnet2DMX.h"
 
 ESP32Artnet2DMX::ESP32Artnet2DMX() {
-  memset( m_data_buffer, 0, sizeof( m_data_buffer ) );
+  memset( m_dmx_buffer, 0, sizeof( m_dmx_buffer ) );
 
   m_artnet_source_ipaddress_any.fromString( "255.255.255.255" );
 
@@ -162,7 +162,6 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   uint16_t protocol = ptr_packetdmx->m_ProtocolLo | ptr_packetdmx->m_ProtocolHi << 8;
   uint16_t universe_in = ptr_packetdmx->m_SubUni | ptr_packetdmx->m_Net << 8;
   uint16_t number_of_channels = ptr_packetdmx->m_Length | ptr_packetdmx->m_LengthHi << 8;
-
 /*
   Serial.printf(" Target protocol = %i\n", ARTNET_VERSION );
   Serial.printf(" Protocol = %i  Universe = %i  Sequence = %i  Nof channels = %i\n", protocol, universe_in, ptr_packetdmx->m_Sequence, number_of_channels );
@@ -173,7 +172,6 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   }
   Serial.print( "\n");
 */
-
   // Set new artnet network timeout
   if( m_ConfigServer.m_artnet_timeout_ms != -1 ) {
     m_artnet_timeout_next_ms = millis() + m_ConfigServer.m_artnet_timeout_ms;
@@ -184,17 +182,16 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
     return;
   }
 
-  // Note: m_data_buffer[ 0 ] must be 0x00 which is DMX null start code.  Actual dmx channel data will start at m_data_buffer[ 1 ]
-  //       dmx_data[ 0 ] relates to first channel data, so the array needs to be adjusted.
-  memcpy( &m_data_buffer[ 1 ], ptr_packetdmx->m_Data, number_of_channels * sizeof( uint8_t ) );
+  // Note: m_dmx_buffer[ 0 ] must be 0x00 which is DMX null start code.  Actual dmx channel data will start at m_dmx_buffer[ 1 ]
+  //       ptr_packetdmx->m_Data[ 0 ] relates to first channel data, so the array needs to be adjusted.
+  memcpy( &m_dmx_buffer[ 1 ], ptr_packetdmx->m_Data, number_of_channels * sizeof( uint8_t ) );
 
   // DMX data will be sent on m_dmx_update_time_next_ms
 }
 
 void ESP32Artnet2DMX::SendDMX()
 {
-  return;
-  dmx_write( DMX_NUM_1, m_data_buffer, DMX_PACKET_SIZE );
+  dmx_write( DMX_NUM_1, m_dmx_buffer, DMX_PACKET_SIZE );
   dmx_send_num( DMX_NUM_1, DMX_PACKET_SIZE );
   dmx_wait_sent( DMX_NUM_1, DMX_TIMEOUT_TICK );
   m_dmx_update_time_next_ms += m_ConfigServer.m_dmx_update_interval_ms;

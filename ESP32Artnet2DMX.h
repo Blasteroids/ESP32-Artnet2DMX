@@ -45,6 +45,8 @@ private:
 
   uint8_t       m_data_buffer[ ARTNET_PACKET_MAXSIZE ];
 
+  uint8_t       m_dmx_buffer[ 513 ];
+
   WiFiUDP       m_WiFiUDP;
 
   // Config
