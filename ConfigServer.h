@@ -45,10 +45,10 @@ public:
   int m_gpio_receive;      // Ensure pin is not connected to anything.  Default = 38
 
   // Artnet 2 DMX settings
-  String m_artnet_source_ip;        // The IP that we're expecting data from.  Use 255.255.255.255 for any.
-  int    m_artnet_universe;         // Universe to listen for, all other universes are ignored.  Default = 1
-  long   m_artnet_timeout_ms;       // When no artnet data has been received by this amount of ms then turn off all dmx.  Default = 2000.  Use -1 for no timeout.
-  long   m_dmx_update_interval_ms;  // The interval between updating the dmx line in ms.  Default = 23
+  String          m_artnet_source_ip;        // The IP that we're expecting data from.  Use 255.255.255.255 for any.
+  int             m_artnet_universe;         // Universe to listen for, all other universes are ignored.  Default = 1
+  unsigned long   m_artnet_timeout_ms;       // When no artnet data has been received by this amount of ms then turn off all dmx.  Default = 2000.  Use -1 for no timeout.
+  unsigned long   m_dmx_update_interval_ms;  // The interval between updating the dmx line in ms.  Default = 23
 
 private:
   void ResetConfigToDefault();

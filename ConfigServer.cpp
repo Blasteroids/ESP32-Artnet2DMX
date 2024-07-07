@@ -17,6 +17,12 @@ void ConfigServer::Init() {
 }
 
 void ConfigServer::ResetConfigToDefault() {
+  // Remove existing settings file.
+  if( LittleFS.begin( false ) ) {
+    LittleFS.remove( CONFIG_FILENAME );
+  }
+
+  // Reset all config
   this->ResetWiFiToDefault();
   this->ResetESP32PinsToDefault();
   this->ResetArtnet2DMXToDefault();
@@ -42,7 +48,7 @@ void ConfigServer::ResetESP32PinsToDefault() {
 void ConfigServer::ResetArtnet2DMXToDefault() {
   m_artnet_source_ip       = "255.255.255.255";  // Any IP source is fine.
   m_artnet_universe        = 1;                  // Universe to listen for, all other universes are ignored.
-  m_artnet_timeout_ms      = 2000;               // Artnet timeout
+  m_artnet_timeout_ms      = 3000;               // Artnet timeout
   m_dmx_update_interval_ms = 23;                 // Roughly 4hz
 }
 
@@ -316,7 +322,7 @@ void ConfigServer::SendArtnet2DMXSetupPage() {
   m_WebpageBuilder.AddBreak( 1 );
   m_WebpageBuilder.AddInputType( "number", "Art-Net universe", "artnet_universe", String( m_artnet_universe ), "", true );
   m_WebpageBuilder.AddBreak( 2 );
-  m_WebpageBuilder.AddLabel( "Art-Net timeout in ms", "Art-Net timeout in ms.  If no data received after this time then everything is turned off.  Use -1 to disable." );
+  m_WebpageBuilder.AddLabel( "Art-Net timeout in ms", "Art-Net timeout in ms.  If no data received after this time then everything is turned off.  Use 0 to disable." );
   m_WebpageBuilder.AddBreak( 1 );
   m_WebpageBuilder.AddInputType( "number", "Art-Net timeout in ms", "artnet_timeout_ms", String( m_artnet_timeout_ms ), "", true );
   m_WebpageBuilder.AddBreak( 2 );

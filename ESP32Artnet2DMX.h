@@ -39,9 +39,9 @@ private:
 
   bool          m_is_started;
   
-  long          m_artnet_timeout_next_ms;
+  unsigned long m_artnet_timeout_next_ms;
 
-  long          m_dmx_update_time_next_ms;
+  unsigned long m_dmx_update_time_next_ms;
 
   uint8_t       m_data_buffer[ ARTNET_PACKET_MAXSIZE ];
 

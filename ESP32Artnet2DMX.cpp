@@ -49,8 +49,8 @@ bool ESP32Artnet2DMX::Start() {
 
   m_dmx_update_time_next_ms = millis();
 
-  if( m_ConfigServer.m_artnet_timeout_ms == -1 ) {
-    m_artnet_timeout_next_ms = -1;
+  if( m_ConfigServer.m_artnet_timeout_ms == 0 ) {
+    m_artnet_timeout_next_ms = 0;
   } else {
     m_artnet_timeout_next_ms = m_dmx_update_time_next_ms + m_ConfigServer.m_artnet_timeout_ms;
   }
@@ -90,9 +90,9 @@ void ESP32Artnet2DMX::Update() {
     this->SendDMX();
   }
 
-  if( ( m_artnet_timeout_next_ms != -1 ) && ( millis() >= m_artnet_timeout_next_ms ) ) {
-    m_artnet_timeout_next_ms = -1;
-    memset( m_data_buffer, 0, sizeof( m_data_buffer ) );
+  if( ( m_artnet_timeout_next_ms != 0 ) && ( millis() >= m_artnet_timeout_next_ms ) ) {
+    m_artnet_timeout_next_ms = 0;
+    memset( m_dmx_buffer, 0, sizeof( m_dmx_buffer ) );
     this->SendDMX();
   }
 }
@@ -162,6 +162,7 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   uint16_t protocol = ptr_packetdmx->m_ProtocolLo | ptr_packetdmx->m_ProtocolHi << 8;
   uint16_t universe_in = ptr_packetdmx->m_SubUni | ptr_packetdmx->m_Net << 8;
   uint16_t number_of_channels = ptr_packetdmx->m_Length | ptr_packetdmx->m_LengthHi << 8;
+
 /*
   Serial.printf(" Target protocol = %i\n", ARTNET_VERSION );
   Serial.printf(" Protocol = %i  Universe = %i  Sequence = %i  Nof channels = %i\n", protocol, universe_in, ptr_packetdmx->m_Sequence, number_of_channels );
@@ -172,8 +173,9 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   }
   Serial.print( "\n");
 */
+
   // Set new artnet network timeout
-  if( m_ConfigServer.m_artnet_timeout_ms != -1 ) {
+  if( m_ConfigServer.m_artnet_timeout_ms != 0 ) {
     m_artnet_timeout_next_ms = millis() + m_ConfigServer.m_artnet_timeout_ms;
   }
 
