@@ -51,7 +51,7 @@ Now disconnect the USB from ESP32 so that it's no longer connected to the PC and
 
 Connect a device (phone/pc) to the WiFi hotspot "ESP32_ArtNet2DMX" using the passcode "1234567890".
 
-Using a webbrowser go to "http://192.168.1.1/" and a setup screen will appear with 3 options 'WiFi' 'ESP32 Pins' & 'Art-Net 2 DMX'.
+Using a webbrowser go to "http://192.168.1.1/" and a setup screen will appear with multiple options.
 
 Enter the WiFi screen and enter in your local WiFi details in WiFi SSID & Password.
 If your network has DHCP then check with your router which IP it will get from the MAC, or enter in manually a static IP & Subnet.
@@ -69,15 +69,7 @@ Here are the default settings.
 |GPIO Receive | 38 | Ensure nothing is connected to this GPIO |
 |Artnet Universe | 1 | The Artnet universe to listen for, all other universes are ignored |
 
-### Updated 12th July 2024 (Pt.2)
- - Fixed channel mods, they now apply in channel order starting fronm 1.
-   
-### Updated 12th July 2024
- - Changed default timeout to 3000 ms for Artnet data.
- - Added button to disable DMX output, which is useful when setting up.
- - Added 'Channel Mods'.  This allows channel values to be changed in real-time.
-
-### Channel Mods
+The 'Channel Mods' screen allow you to change the values that are sent to DMX using modifiers.  This is helpful if you have different light units on different channels and want to have them slightly different.
 
 | Mod Type | Note |
 |:--|:-:|
@@ -90,6 +82,14 @@ Here are the default settings.
 
 Note: These mods are applied in channel order starting from channel 1.  So if you mod channel 1 and then copy channel 1 to channel 10, then channel 10 will also have the channel 1 mod applied.
 
+### Updated 12th July 2024 (Pt.1)
+ - Changed default timeout to 3000 ms for Artnet data.
+ - Added button to disable DMX output, which is useful when setting up.
+ - Added 'Channel Mods'.  This allows channel values to be changed in real-time.
+
+### Updated 12th July 2024 (Pt.2)
+ - Fixed channel mods, they now apply in channel order starting from 1.
+   
 # Art-Net
 
 Art-Net(tm) is a trademark of Artistic Licence Holdings Ltd. The Art-Net protocol and associated documentation is copyright Artistic Licence Holdings Ltd.
