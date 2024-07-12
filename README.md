@@ -69,6 +69,9 @@ Here are the default settings.
 |GPIO Receive | 38 | Ensure nothing is connected to this GPIO |
 |Artnet Universe | 1 | The Artnet universe to listen for, all other universes are ignored |
 
+### Updated 12th July 2024 (Pt.2)
+ - Fixed channel mods, they now apply in channel order starting fronm 1.
+   
 ### Updated 12th July 2024
  - Changed default timeout to 3000 ms for Artnet data.
  - Added button to disable DMX output, which is useful when setting up.
@@ -85,7 +88,7 @@ Here are the default settings.
 |Add From Channel | Add the value from a given channel to the channel |
 |Minus From Channel | Minus the value from a given channel to the channel |
 
-Warning: Currently these mods are applied in the order that they are added, this will change in a future update to be assigned from channel 1 upwards, and then their respective order.
+Note: These mods are applied in channel order starting from channel 1.  So if you mod channel 1 and then copy channel 1 to channel 10, then channel 10 will also have the channel 1 mod applied.
 
 # Art-Net
 
