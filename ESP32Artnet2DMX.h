@@ -4,6 +4,7 @@
 //
 #include <iostream>
 #include <string>
+#include <vector>
 //
 #include <WiFi.h>   // WiFi Ref. : https://www.arduino.cc/reference/en/libraries/wifi/
 #include <WebServer.h>

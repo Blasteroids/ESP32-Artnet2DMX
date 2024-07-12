@@ -163,19 +163,42 @@ void WebpageBuilder::AddEnabledSelection( const String& name, const String& id, 
 }
 
 void WebpageBuilder::AddSpace( int amount ) {
-  for( int i = 0; i < amount; i++ )
-  {
+  for( int i = 0; i < amount; i++ ) {
     m_html += "&nbsp";
   }
 }
 
 void WebpageBuilder::AddBreak( int amount ) {
-  for( int i = 0; i < amount; i++ )
-  {
+  for( int i = 0; i < amount; i++ ) {
     m_html += "<br>";
   }
 }
 
 void WebpageBuilder::AddStandardViewportScale() {
   m_html += "<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+}
+
+void WebpageBuilder::AddSelector2Items( const String& name, const String& id, const String& option1, const String& option2, bool select_option1 ) {
+  m_html += "<select name=\"" + name + "\" id=\"" + id + "\"><option value=\"" + option1 + "\"";
+  if( select_option1 ) {
+    m_html += " selected";
+  }
+  m_html += ">" + option1 + "</option><option value=\"" + option2 +"\"";
+  if( !select_option1 ) {
+    m_html += " selected";
+  }
+  m_html += ">" + option2 + "</option></select>";
+}
+
+void WebpageBuilder::AddSelectorNumberList( const String& name, const String& id, const int number_low, const int number_high, const int number_selected ) {
+  m_html += "<select name=\"" + name + "\" id=\"" + id + "\">";
+
+  for( int i = number_low; i <= number_high; i++ ) {
+    m_html += "<option value=\"" + String( i ) + "\"";
+    if( i == number_selected ) {
+      m_html += " selected";
+    }
+    m_html += ">" + String( i ) + "</option>";
+  }
+  m_html += "</select>";
 }

@@ -72,6 +72,10 @@ public:
   
   void AddStandardViewportScale();
 
+  void AddSelector2Items( const String& name, const String& id, const String& option1, const String& option2, bool select_option1 );
+
+  void AddSelectorNumberList( const String& name, const String& id, const int number_low, const int number_high, const int number_selected );
+
   String m_html;
 
 private:

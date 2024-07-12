@@ -188,11 +188,63 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   //       ptr_packetdmx->m_Data[ 0 ] relates to first channel data, so the array needs to be adjusted.
   memcpy( &m_dmx_buffer[ 1 ], ptr_packetdmx->m_Data, number_of_channels * sizeof( uint8_t ) );
 
+  // Process any channel mods
+  for( std::vector<ChannelMod>::iterator ptr_mod = m_ConfigServer.m_channel_mods_vector.begin(); ptr_mod != m_ConfigServer.m_channel_mods_vector.end(); ++ptr_mod ) {
+    if( ptr_mod->m_channel < 513 ) {
+      switch( ptr_mod->m_mod_type ) {
+        case CHANNELMODTYPE::EQUALS_VALUE: {
+          m_dmx_buffer[ ptr_mod->m_channel ] = ptr_mod->m_mod_value;
+          break;
+        }
+        case CHANNELMODTYPE::ADD_VALUE: {
+          if( m_dmx_buffer[ ptr_mod->m_channel ] > 255 - ptr_mod->m_mod_value ) {
+            m_dmx_buffer[ ptr_mod->m_channel ] = 255;
+          } else {
+            m_dmx_buffer[ ptr_mod->m_channel ] += ptr_mod->m_mod_value;
+          }
+          break;
+        }
+        case CHANNELMODTYPE::MINUS_VALUE: {
+          if( m_dmx_buffer[ ptr_mod->m_channel ] < ptr_mod->m_mod_value ) {
+            m_dmx_buffer[ ptr_mod->m_channel ] = 0;
+          } else {
+            m_dmx_buffer[ ptr_mod->m_channel ] -= ptr_mod->m_mod_value;
+          }
+          break;
+        }
+        case CHANNELMODTYPE::COPY_FROM_CHANNEL: {
+          m_dmx_buffer[ ptr_mod->m_channel ] = m_dmx_buffer[ ptr_mod->m_mod_value ];
+          break;
+        }
+        case CHANNELMODTYPE::ADD_FROM_CHANNEL: {
+          if( m_dmx_buffer[ ptr_mod->m_channel ] > 255 - m_dmx_buffer[ ptr_mod->m_mod_value ] ) {
+            m_dmx_buffer[ ptr_mod->m_channel ] = 255;
+          } else {
+            m_dmx_buffer[ ptr_mod->m_channel ] += m_dmx_buffer[ ptr_mod->m_mod_value ];
+          }
+          break;
+        }
+        case CHANNELMODTYPE::MINUS_FROM_CHANNEL: {
+          if( m_dmx_buffer[ ptr_mod->m_channel ] < m_dmx_buffer[ ptr_mod->m_mod_value ] ) {
+            m_dmx_buffer[ ptr_mod->m_channel ] = 0;
+          } else {
+            m_dmx_buffer[ ptr_mod->m_channel ] -= m_dmx_buffer[ ptr_mod->m_mod_value ];
+          }
+          break;
+        }
+      }
+    }
+  }
+
   // DMX data will be sent on m_dmx_update_time_next_ms
 }
 
 void ESP32Artnet2DMX::SendDMX()
 {
+  if( !m_ConfigServer.m_dmx_enabled ) {
+    return;
+  }
+
   dmx_write( DMX_NUM_1, m_dmx_buffer, DMX_PACKET_SIZE );
   dmx_send_num( DMX_NUM_1, DMX_PACKET_SIZE );
   dmx_wait_sent( DMX_NUM_1, DMX_TIMEOUT_TICK );
