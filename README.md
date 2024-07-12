@@ -69,6 +69,24 @@ Here are the default settings.
 |GPIO Receive | 38 | Ensure nothing is connected to this GPIO |
 |Artnet Universe | 1 | The Artnet universe to listen for, all other universes are ignored |
 
+### Updated 12th July 2024
+ - Changed default timeout to 3000 ms for Artnet data.
+ - Added button to disable DMX output, which is useful when setting up.
+ - Added 'Channel Mods'.  This allows channel values to be changed in real-time.
+
+### Channel Mods
+
+| Mod Type | Note |
+|:--|:-:|
+|Equals Value | Assigns a given value to that channel |
+|Add Value | Adds a given value to the existing channel value |
+|Minus Value | Minuses a given value to the existing channel value |
+|Copy From Value | Copy the value from a given channel to the channel |
+|Add From Channel | Add the value from a given channel to the channel |
+|Minus From Channel | Minus the value from a given channel to the channel |
+
+Warning: Currently these mods are applied in the order that they are added, this will change in a future update to be assigned from channel 1 upwards, and then their respective order.
+
 # Art-Net
 
 Art-Net(tm) is a trademark of Artistic Licence Holdings Ltd. The Art-Net protocol and associated documentation is copyright Artistic Licence Holdings Ltd.
