@@ -722,12 +722,14 @@ bool ConfigServer::HandleSetupChannelModsForChannel( int channel_number ) {
 }
 
 void ConfigServer::ChannelModsAddMod( unsigned int channel_number, unsigned int mod_type, unsigned int mod_value ) {
-    ChannelMod mod;
-    mod.m_sequence = this->ChannelModsMaxSequence() + 1;
-    mod.m_channel = channel_number;
-    mod.m_mod_type = mod_type;
-    mod.m_mod_value = mod_value;
-    m_channel_mods_vector.push_back( mod );
+  ChannelMod mod;
+  mod.m_sequence = this->ChannelModsMaxSequenceForChannel( channel_number ) + 1;
+  mod.m_channel = channel_number;
+  mod.m_mod_type = mod_type;
+  mod.m_mod_value = mod_value;
+  m_channel_mods_vector.push_back( mod );
+
+  this->ChannelModsSortBySequenceAndRenumber();
 }
 
 void ConfigServer::ChannelModsRemoveMod( unsigned int sequence_number ) {
@@ -744,11 +746,11 @@ void ConfigServer::ChannelModsRemoveMod( unsigned int sequence_number ) {
 void ConfigServer::ChannelModsSortBySequenceAndRenumber() {
   std::sort( m_channel_mods_vector.begin(), m_channel_mods_vector.end(), ChannelMod::CompareChannelModSequence );
   
-  int sequence_new = 1;
+  int sequence_new = 10;
 
   for( auto& mod : m_channel_mods_vector ) {
     mod.m_sequence = sequence_new;
-    sequence_new++;
+    sequence_new += 10;
   }
 }
 
@@ -775,6 +777,18 @@ unsigned int ConfigServer::ChannelModsMaxSequence() {
 
   for( auto& mod: m_channel_mods_vector ) {
     if( mod.m_sequence > sequence_max ) {
+      sequence_max = mod.m_sequence;
+    }
+  }
+
+  return sequence_max;
+}
+
+unsigned int ConfigServer::ChannelModsMaxSequenceForChannel( unsigned int channel_number ) {
+  unsigned int sequence_max = 0;
+
+  for( auto& mod: m_channel_mods_vector ) {
+    if( mod.m_channel == channel_number && mod.m_sequence > sequence_max ) {
       sequence_max = mod.m_sequence;
     }
   }
