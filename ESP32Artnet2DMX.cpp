@@ -232,6 +232,26 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
           }
           break;
         }
+        case CHANNELMODTYPE::ABOVE_0_ADD_VALUE: {
+          if( m_dmx_buffer[ ptr_mod->m_channel ] > 0 ) {
+            if( m_dmx_buffer[ ptr_mod->m_channel ] > 255 - ptr_mod->m_mod_value ) {
+              m_dmx_buffer[ ptr_mod->m_channel ] = 255;
+            } else {
+              m_dmx_buffer[ ptr_mod->m_channel ] += ptr_mod->m_mod_value;
+            }
+          }
+          break;
+        }
+        case CHANNELMODTYPE::ABOVE_0_MINUS_VALUE: {
+          if( m_dmx_buffer[ ptr_mod->m_channel ] > 0 ) {
+            if( m_dmx_buffer[ ptr_mod->m_channel ] < ptr_mod->m_mod_value ) {
+              m_dmx_buffer[ ptr_mod->m_channel ] = 0;
+            } else {
+              m_dmx_buffer[ ptr_mod->m_channel ] -= ptr_mod->m_mod_value;
+            }
+          }
+          break;
+        }
       }
     }
   }

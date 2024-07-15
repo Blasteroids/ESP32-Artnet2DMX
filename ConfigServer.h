@@ -91,12 +91,13 @@ private:
   void         ChannelModsUpdateForModValue( unsigned int sequence_number, unsigned int mod_value );
   unsigned int ChannelModsMaxSequence();
   unsigned int ChannelModsMaxSequenceForChannel( unsigned int channel_number );
+  void         ChannelModsRemoveAllForChannel( unsigned int channel_number );
 
   WebServer*     m_ptr_WebServer;
   WebpageBuilder m_WebpageBuilder;
-  
-  bool m_settings_changed;
-  bool m_is_connected_to_wifi;
+  String         m_mac_address;
+  bool           m_settings_changed;
+  bool           m_is_connected_to_wifi;
 };
 
 #endif

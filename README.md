@@ -79,8 +79,13 @@ The 'Channel Mods' screen allow you to change the values that are sent to DMX us
 |Copy From Value | Copy the value from a given channel to the channel |
 |Add From Channel | Add the value from a given channel to the channel |
 |Minus From Channel | Minus the value from a given channel to the channel |
+|Only Add if value above 0 | Adds the given value if the current channel value is above 0 |
+|Only Minus if value above 0 | Minuses the given value if the current channel value is above 0 |
 
-Note: These mods are applied in channel order starting from channel 1.  So if you mod channel 1 and then copy channel 1 to channel 10, then channel 10 will also have the channel 1 mod applied.
+Notes:
+  - Channel mods are applied in channel order starting from channel 1.  So if you mod channel 1 and then copy channel 1 to channel 10, then channel 10 will also have the channel 1 mod applied.
+  - It's advisable to disable DMX output whilst setting up, otherwise there might be a slowdown in the web response.
+  - To help reduce any potential packetloss, ensure that your Art-Net sender is sending directly to the IP of the device.
 
 ### Updated 12th July 2024 (Pt.1)
  - Changed default timeout to 3000 ms for Artnet data.
@@ -90,6 +95,11 @@ Note: These mods are applied in channel order starting from channel 1.  So if yo
 ### Updated 12th July 2024 (Pt.2)
  - Fixed channel mods, they now apply in channel order starting from 1.
    
+### Updated 15th July 2024
+ - Added 2 channel value modifiers
+ - Channel mods setup page now lists channels that have mods with quick edit & remove buttons.
+ - Fixed bug where device mac wasn't always showing on the WiFi setup page.
+ 
 # Art-Net
 
 Art-Net(tm) is a trademark of Artistic Licence Holdings Ltd. The Art-Net protocol and associated documentation is copyright Artistic Licence Holdings Ltd.

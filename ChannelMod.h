@@ -14,26 +14,30 @@ struct ChannelMod {
 };
 
 enum CHANNELMODTYPE : int {
-  NOTHING            = 0,
-  EQUALS_VALUE       = 1,
-  ADD_VALUE          = 2,
-  MINUS_VALUE        = 3,
-  COPY_FROM_CHANNEL  = 4,
-  ADD_FROM_CHANNEL   = 5,
-  MINUS_FROM_CHANNEL = 6,
-  MAX                = 6,
+  NOTHING             = 0,
+  EQUALS_VALUE        = 1,
+  ADD_VALUE           = 2,
+  MINUS_VALUE         = 3,
+  COPY_FROM_CHANNEL   = 4,
+  ADD_FROM_CHANNEL    = 5,
+  MINUS_FROM_CHANNEL  = 6,
+  ABOVE_0_ADD_VALUE   = 7,
+  ABOVE_0_MINUS_VALUE = 8,
+  MAX                 = 8,
 };
 
 inline const char* ModTypeAsString( int modtype ) {
   switch( modtype ) {
-    case NOTHING:            return "Select Mod";
-    case EQUALS_VALUE:       return "Equals Value";
-    case ADD_VALUE:          return "Add Value";
-    case MINUS_VALUE:        return "Minus Value";
-    case COPY_FROM_CHANNEL:  return "Copy From Channel";
-    case ADD_FROM_CHANNEL:   return "Add From Channel";
-    case MINUS_FROM_CHANNEL: return "Minus From Channel";
-    default:                 return "Unknown Mod Type";
+    case NOTHING:             return "Select Mod";
+    case EQUALS_VALUE:        return "Equals Value";
+    case ADD_VALUE:           return "Add Value";
+    case MINUS_VALUE:         return "Minus Value";
+    case COPY_FROM_CHANNEL:   return "Copy From Channel";
+    case ADD_FROM_CHANNEL:    return "Add From Channel";
+    case MINUS_FROM_CHANNEL:  return "Minus From Channel";
+    case ABOVE_0_ADD_VALUE:   return "Only Add if value above 0";
+    case ABOVE_0_MINUS_VALUE: return "Only Minus if value above 0";
+    default:                  return "Unknown Mod Type";
   }
 };
 

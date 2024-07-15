@@ -2,7 +2,8 @@
 #include "ConfigServer.h"
 
 ConfigServer::ConfigServer() {
-  m_settings_changed = false;
+  m_settings_changed     = false;
+  m_is_connected_to_wifi = false;
 }
 
 ConfigServer::~ConfigServer() {
@@ -161,6 +162,9 @@ bool ConfigServer::ConnectToWiFi() {
     m_is_connected_to_wifi = false;
   }
 
+  WiFi.begin();
+  m_mac_address = WiFi.macAddress();
+
   IPAddress ip( 192, 168, 1, 1 );
   IPAddress subnet( 255, 255, 255, 0 );
 
@@ -222,8 +226,6 @@ bool ConfigServer::Update() {
 }
 
 void ConfigServer::SendSetupMenuPage() {
-  String mac_address = "Device MAC = " + WiFi.macAddress();
-
   m_WebpageBuilder.StartPage();
   m_WebpageBuilder.AddTitle( "Artnet2DMX Setup Page" );
   m_WebpageBuilder.StartBody();
@@ -240,9 +242,11 @@ void ConfigServer::SendSetupMenuPage() {
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddButtonActionForm( "settings_channelmods", "Channel Mods" );
 
-  m_WebpageBuilder.AddBreak( 4 );
+  m_WebpageBuilder.AddBreak( 3 );
+  m_WebpageBuilder.AddLabel( "note", "It's advisable to disable DMX during setup." );
+  m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddLabel( "dmx_status", "DMX Status" );
-  m_WebpageBuilder.AddBreak( 1 );
+  m_WebpageBuilder.AddBreak( 2 );
   if( m_dmx_enabled ) {
     m_WebpageBuilder.AddButtonActionForm( "dmx_disable", "ENABLED" );
   } else {
@@ -261,8 +265,6 @@ void ConfigServer::SendSetupMenuPage() {
 }
 
 void ConfigServer::SendWiFiSetupPage() {
-  String mac_address = "Device MAC = " + WiFi.macAddress();
-
   m_WebpageBuilder.StartPage();
   m_WebpageBuilder.AddTitle( "Artnet2DMX Setup Page" );
   m_WebpageBuilder.StartBody();
@@ -270,7 +272,7 @@ void ConfigServer::SendWiFiSetupPage() {
   m_WebpageBuilder.AddHeading( "WiFi Setup" );
 
   // WiFi settings
-  m_WebpageBuilder.AddText( mac_address );
+  m_WebpageBuilder.AddText( "Device MAC = " + m_mac_address );
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddFormAction( "/setup_wifi", "POST" );
   m_WebpageBuilder.AddLabel( "wifi_ssid", "WiFi ssid : " );
@@ -288,12 +290,12 @@ void ConfigServer::SendWiFiSetupPage() {
 
   // Submit button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButton( "submit", "SUBMIT" );
+  m_WebpageBuilder.AddButton( "submit", "SUBMIT & SAVE" );
   m_WebpageBuilder.EndFormAction();
 
   // Cancel button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButtonActionForm( "/", "CANCEL" );
+  m_WebpageBuilder.AddButtonActionForm( "/", "RETURN TO MAIN MENU" );
 
   // Reset button
   m_WebpageBuilder.AddBreak( 3 );
@@ -331,12 +333,12 @@ void ConfigServer::SendESP32PinsSetupPage() {
 
   // Submit button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButton( "submit", "SUBMIT" );
+  m_WebpageBuilder.AddButton( "submit", "SUBMIT & SAVE" );
   m_WebpageBuilder.EndFormAction();
 
   // Cancel button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButtonActionForm( "/", "CANCEL" );
+  m_WebpageBuilder.AddButtonActionForm( "/", "RETURN TO MAIN MENU" );
 
   // Reset button
   m_WebpageBuilder.AddBreak( 3 );
@@ -376,12 +378,12 @@ void ConfigServer::SendArtnet2DMXSetupPage() {
 
   // Submit button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButton( "submit", "SUBMIT" );
+  m_WebpageBuilder.AddButton( "submit", "SUBMIT & SAVE" );
   m_WebpageBuilder.EndFormAction();
 
   // Cancel button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButtonActionForm( "/", "CANCEL" );
+  m_WebpageBuilder.AddButtonActionForm( "/", "RETURN TO MAIN MENU" );
 
   // Reset button
   m_WebpageBuilder.AddBreak( 3 );
@@ -410,17 +412,46 @@ void ConfigServer::SendChannelModsSetupPage() {
 
   // Submit button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButton( "submit", "SUBMIT" );
+  m_WebpageBuilder.AddButton( "submit", "ADD NEW" );
   m_WebpageBuilder.EndFormAction();
 
   // Cancel button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButtonActionForm( "/", "CANCEL" );
+  m_WebpageBuilder.AddButtonActionForm( "/", "RETURN TO MAIN MENU" );
 
   // Reset button
   m_WebpageBuilder.AddBreak( 3 );
   m_WebpageBuilder.AddButtonActionForm( "reset_channelmods", "RESET ALL CHANNEL MODS TO DEFAULT" );
 
+  // Edit & Remove buttons for existing channels with mods
+  m_WebpageBuilder.AddBreak( 3 );
+  m_WebpageBuilder.AddGridStyle( "grid-container", 3 );
+  m_WebpageBuilder.AddFormAction( "/channelmods_er", "POST" );
+  m_WebpageBuilder.StartDivClass( "grid-container" );
+
+  m_WebpageBuilder.AddGridCellText( "Channel" );
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+
+  bool channel_has_mods[ 513 ];
+  for(int i = 1; i < 512; ++i) {
+    channel_has_mods[ i ] = false;
+  }
+
+  for( std::vector<ChannelMod>::iterator ptr_mod = m_channel_mods_vector.begin(); ptr_mod != m_channel_mods_vector.end(); ++ptr_mod ) {
+    channel_has_mods[ ptr_mod->m_channel ] = true;
+  }
+
+  for(int i = 1; i < 512; ++i) {
+    if( channel_has_mods[ i ] ) {
+      m_WebpageBuilder.AddGridCellText( String( i ) );
+      m_WebpageBuilder.AddButtonAction( "channelmods_edit" + String( i ), "Edit" );
+      m_WebpageBuilder.AddButtonAction( "channelmods_remove" + String( i ), "Remove" );
+    }
+  }
+
+  m_WebpageBuilder.EndFormAction();
+  m_WebpageBuilder.EndDiv();
   m_WebpageBuilder.EndCenter();
   m_WebpageBuilder.EndBody();
   m_WebpageBuilder.EndPage();
@@ -476,7 +507,7 @@ void ConfigServer::SendChannelModsForChannelSetupPage( int channel_number ) {
   // Submit button
   //m_WebpageBuilder.AddBreak( 3 );
   m_WebpageBuilder.AddGridCellText( "" );
-  m_WebpageBuilder.AddButtonAction( "setup_channelmodsfor" + String( channel_number ), "SUBMIT" );
+  m_WebpageBuilder.AddButtonAction( "setup_channelmodsfor" + String( channel_number ), "SAVE" );
   m_WebpageBuilder.AddGridCellText( "" );
 
   m_WebpageBuilder.EndFormAction();
@@ -485,11 +516,7 @@ void ConfigServer::SendChannelModsForChannelSetupPage( int channel_number ) {
 
   // Cancel button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButtonActionForm( "/settings_channelmods", "CANCEL" );
-
-  // Reset button
-  //m_WebpageBuilder.AddBreak( 3 );
-  //m_WebpageBuilder.AddButtonActionForm( "reset_channelmods", "RESET ALL CHANNEL MODS TO DEFAULT" );
+  m_WebpageBuilder.AddButtonActionForm( "/settings_channelmods", "RETURN TO CHANNEL MODS SETUP" );
 
   m_WebpageBuilder.EndCenter();
   m_WebpageBuilder.EndBody();
@@ -506,7 +533,6 @@ void ConfigServer::HandleWebServerData() {
   if( m_ptr_WebServer->uri() == String( "/reset_all" ) ) {
     m_ptr_WebServer->send( 200, "text/plain", "Resetting everything to defaults - Reconnect to hotspot to setup WiFi." );
     delay( 2000 );
-    // Maybe wipe FS here?
     this->ResetConfigToDefault();
     this->SettingsSave();
     this->ConnectToWiFi();
@@ -607,12 +633,21 @@ bool ConfigServer::HandleWebPost() {
     return true;
   } else if( m_ptr_WebServer->uri().startsWith( "/mod_del_" ) ) {
     size_t position_of_channel = m_ptr_WebServer->uri().indexOf( 'C' );
-    
     unsigned int sequence_number = m_ptr_WebServer->uri().substring( 9, position_of_channel ).toInt();
     unsigned int channel = m_ptr_WebServer->uri().substring( position_of_channel + 1 ).toInt();
     this->ChannelModsRemoveMod( sequence_number );
     this->SettingsSave();
     this->SendChannelModsForChannelSetupPage( channel );
+    return true;
+  } else if ( m_ptr_WebServer->uri().startsWith( "/channelmods_edit" ) ) {
+    unsigned int channel = m_ptr_WebServer->uri().substring( 17 ).toInt();
+    this->SendChannelModsForChannelSetupPage( channel );
+    return true;
+  } else if ( m_ptr_WebServer->uri().startsWith( "/channelmods_remove" ) ) {
+    unsigned int channel = m_ptr_WebServer->uri().substring( 19 ).toInt();
+    this->ChannelModsRemoveAllForChannel( channel );
+    this->SettingsSave();
+    this->SendChannelModsSetupPage();
     return true;
   } else {
     Serial.printf("Unhandled WebPost = %s\n", m_ptr_WebServer->uri() );
@@ -794,4 +829,15 @@ unsigned int ConfigServer::ChannelModsMaxSequenceForChannel( unsigned int channe
   }
 
   return sequence_max;
+}
+
+void ConfigServer::ChannelModsRemoveAllForChannel( unsigned int channel_number ) {
+  for( auto mods_itr = m_channel_mods_vector.begin(); mods_itr != m_channel_mods_vector.end(); ) {
+    if( mods_itr->m_channel == channel_number ) {
+      m_channel_mods_vector.erase( mods_itr );
+      break;
+    }
+    ++mods_itr;
+  }
+  this->ChannelModsSortBySequenceAndRenumber();
 }
