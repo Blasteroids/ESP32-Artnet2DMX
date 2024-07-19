@@ -90,7 +90,7 @@ private:
   void         ChannelModsUpdateForModType( unsigned int sequence_number, unsigned int mod_type );
   void         ChannelModsUpdateForModValue( unsigned int sequence_number, unsigned int mod_value );
   unsigned int ChannelModsMaxSequence();
-  unsigned int ChannelModsMaxSequenceForChannel( unsigned int channel_number );
+  unsigned int ChannelModsNextSequenceForChannel( unsigned int channel_number );
   void         ChannelModsRemoveAllForChannel( unsigned int channel_number );
 
   WebServer*     m_ptr_WebServer;

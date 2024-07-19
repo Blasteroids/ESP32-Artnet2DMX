@@ -162,7 +162,6 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   uint16_t protocol = ptr_packetdmx->m_ProtocolLo | ptr_packetdmx->m_ProtocolHi << 8;
   uint16_t universe_in = ptr_packetdmx->m_SubUni | ptr_packetdmx->m_Net << 8;
   uint16_t number_of_channels = ptr_packetdmx->m_Length | ptr_packetdmx->m_LengthHi << 8;
-
 /*
   Serial.printf(" Target protocol = %i\n", ARTNET_VERSION );
   Serial.printf(" Protocol = %i  Universe = %i  Sequence = %i  Nof channels = %i\n", protocol, universe_in, ptr_packetdmx->m_Sequence, number_of_channels );
@@ -173,7 +172,6 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   }
   Serial.print( "\n");
 */
-
   // Set new artnet network timeout
   if( m_ConfigServer.m_artnet_timeout_ms != 0 ) {
     m_artnet_timeout_next_ms = millis() + m_ConfigServer.m_artnet_timeout_ms;
@@ -189,65 +187,65 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   memcpy( &m_dmx_buffer[ 1 ], ptr_packetdmx->m_Data, number_of_channels * sizeof( uint8_t ) );
 
   // Process any channel mods
-  for( std::vector<ChannelMod>::iterator ptr_mod = m_ConfigServer.m_channel_mods_vector.begin(); ptr_mod != m_ConfigServer.m_channel_mods_vector.end(); ++ptr_mod ) {
-    if( ptr_mod->m_channel < 513 ) {
-      switch( ptr_mod->m_mod_type ) {
+  for( auto& mod: m_ConfigServer.m_channel_mods_vector ) {
+    if( mod.m_channel < 513 ) {
+      switch( mod.m_mod_type ) {
         case CHANNELMODTYPE::EQUALS_VALUE: {
-          m_dmx_buffer[ ptr_mod->m_channel ] = ptr_mod->m_mod_value;
+          m_dmx_buffer[ mod.m_channel ] = mod.m_mod_value;
           break;
         }
         case CHANNELMODTYPE::ADD_VALUE: {
-          if( m_dmx_buffer[ ptr_mod->m_channel ] > 255 - ptr_mod->m_mod_value ) {
-            m_dmx_buffer[ ptr_mod->m_channel ] = 255;
+          if( m_dmx_buffer[ mod.m_channel ] > 255 - mod.m_mod_value ) {
+            m_dmx_buffer[ mod.m_channel ] = 255;
           } else {
-            m_dmx_buffer[ ptr_mod->m_channel ] += ptr_mod->m_mod_value;
+            m_dmx_buffer[ mod.m_channel ] += (uint8_t) mod.m_mod_value;
           }
           break;
         }
         case CHANNELMODTYPE::MINUS_VALUE: {
-          if( m_dmx_buffer[ ptr_mod->m_channel ] < ptr_mod->m_mod_value ) {
-            m_dmx_buffer[ ptr_mod->m_channel ] = 0;
+          if( m_dmx_buffer[ mod.m_channel ] < mod.m_mod_value ) {
+            m_dmx_buffer[ mod.m_channel ] = 0;
           } else {
-            m_dmx_buffer[ ptr_mod->m_channel ] -= ptr_mod->m_mod_value;
+            m_dmx_buffer[ mod.m_channel ] -= (uint8_t) mod.m_mod_value;
           }
           break;
         }
         case CHANNELMODTYPE::COPY_FROM_CHANNEL: {
-          m_dmx_buffer[ ptr_mod->m_channel ] = m_dmx_buffer[ ptr_mod->m_mod_value ];
+          m_dmx_buffer[ mod.m_channel ] = m_dmx_buffer[ mod.m_mod_value ];
           break;
         }
         case CHANNELMODTYPE::ADD_FROM_CHANNEL: {
-          if( m_dmx_buffer[ ptr_mod->m_channel ] > 255 - m_dmx_buffer[ ptr_mod->m_mod_value ] ) {
-            m_dmx_buffer[ ptr_mod->m_channel ] = 255;
+          if( m_dmx_buffer[ mod.m_channel ] > 255 - m_dmx_buffer[ mod.m_mod_value ] ) {
+            m_dmx_buffer[ mod.m_channel ] = 255;
           } else {
-            m_dmx_buffer[ ptr_mod->m_channel ] += m_dmx_buffer[ ptr_mod->m_mod_value ];
+            m_dmx_buffer[ mod.m_channel ] += m_dmx_buffer[ mod.m_mod_value ];
           }
           break;
         }
         case CHANNELMODTYPE::MINUS_FROM_CHANNEL: {
-          if( m_dmx_buffer[ ptr_mod->m_channel ] < m_dmx_buffer[ ptr_mod->m_mod_value ] ) {
-            m_dmx_buffer[ ptr_mod->m_channel ] = 0;
+          if( m_dmx_buffer[ mod.m_channel ] < m_dmx_buffer[ mod.m_mod_value ] ) {
+            m_dmx_buffer[ mod.m_channel ] = 0;
           } else {
-            m_dmx_buffer[ ptr_mod->m_channel ] -= m_dmx_buffer[ ptr_mod->m_mod_value ];
+            m_dmx_buffer[ mod.m_channel ] -= m_dmx_buffer[ mod.m_mod_value ];
           }
           break;
         }
         case CHANNELMODTYPE::ABOVE_0_ADD_VALUE: {
-          if( m_dmx_buffer[ ptr_mod->m_channel ] > 0 ) {
-            if( m_dmx_buffer[ ptr_mod->m_channel ] > 255 - ptr_mod->m_mod_value ) {
-              m_dmx_buffer[ ptr_mod->m_channel ] = 255;
+          if( m_dmx_buffer[ mod.m_channel ] > 0 ) {
+            if( m_dmx_buffer[ mod.m_channel ] > 255 - mod.m_mod_value ) {
+              m_dmx_buffer[ mod.m_channel ] = 255;
             } else {
-              m_dmx_buffer[ ptr_mod->m_channel ] += ptr_mod->m_mod_value;
+              m_dmx_buffer[ mod.m_channel ] += (uint8_t) mod.m_mod_value;
             }
           }
           break;
         }
         case CHANNELMODTYPE::ABOVE_0_MINUS_VALUE: {
-          if( m_dmx_buffer[ ptr_mod->m_channel ] > 0 ) {
-            if( m_dmx_buffer[ ptr_mod->m_channel ] < ptr_mod->m_mod_value ) {
-              m_dmx_buffer[ ptr_mod->m_channel ] = 0;
+          if( m_dmx_buffer[ mod.m_channel ] > 0 ) {
+            if( m_dmx_buffer[ mod.m_channel ] < mod.m_mod_value ) {
+              m_dmx_buffer[ mod.m_channel ] = 0;
             } else {
-              m_dmx_buffer[ ptr_mod->m_channel ] -= ptr_mod->m_mod_value;
+              m_dmx_buffer[ mod.m_channel ] -= (uint8_t) mod.m_mod_value;
             }
           }
           break;
