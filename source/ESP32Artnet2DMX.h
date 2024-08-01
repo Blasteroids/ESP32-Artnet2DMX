@@ -7,7 +7,6 @@
 #include <vector>
 //
 #include <WiFi.h>   // WiFi Ref. : https://www.arduino.cc/reference/en/libraries/wifi/
-#include <WebServer.h>
 #include <esp_dmx.h>
 //
 #include "ConfigServer.h"
@@ -19,7 +18,7 @@ public:
 
   ~ESP32Artnet2DMX();
 
-  void Init( WebServer* ptr_WebServer );
+  void Init();
 
   bool Start();
 
@@ -28,8 +27,6 @@ public:
   void Update();
 
   void Stop();
-
-  void HandleWebServerData();
 
 private:  
   void SendDMX();

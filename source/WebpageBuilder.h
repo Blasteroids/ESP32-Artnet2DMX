@@ -42,6 +42,8 @@ public:
 
   void AddButtonActionForm( const String& form_action, const String& display_name );
 
+  void AddButtonActionFormPost( const String& form_action, const String& display_name );
+
   void AddTitle( const String& title );
   
   void AddText( const String& text );
@@ -75,6 +77,10 @@ public:
   void AddSelector2Items( const String& name, const String& id, const String& option1, const String& option2, bool select_option1 );
 
   void AddSelectorNumberList( const String& name, const String& id, const int number_low, const int number_high, const int number_selected );
+
+  void AddFileDownloadLink( const String& filename, const String& text );
+
+  void AddFileUpload();
 
   String m_html;
 

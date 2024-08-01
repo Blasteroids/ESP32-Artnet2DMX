@@ -26,7 +26,7 @@ MAX485 TTL to RS485
 |  |  | OUTPUT A | PIN 3  (Data +) |
 |  |  | OUTPUT B | PIN 2  (Data -) |
 
-![WiringDiagram](WiringDiagram.png)
+![WiringDiagram](assets/WiringDiagram.png)
 
 ### Setting it up
 
@@ -76,11 +76,16 @@ The 'Channel Mods' screen allow you to change the values that are sent to DMX us
 |Equals Value | Assigns a given value to that channel |
 |Add Value | Adds a given value to the existing channel value |
 |Minus Value | Minuses a given value to the existing channel value |
-|Copy From Value | Copy the value from a given channel to the channel |
-|Add From Channel | Add the value from a given channel to the channel |
-|Minus From Channel | Minus the value from a given channel to the channel |
+|Copy From Value | Copy the value from a given channel to this DMX channel |
+|Add From Channel | Add the value from a given channel to this DMX channel |
+|Minus From Channel | Minus the value from a given channel to this DMX channel |
 |Only Add if value above 0 | Adds the given value if the current channel value is above 0 |
 |Only Minus if value above 0 | Minuses the given value if the current channel value is above 0 |
+|Copy from Art-Net channel | Copys the given Art-Net channel data into the DMX output channel |
+|Add from Art-Net channel | Adds the given Art-Net channel data into the DMX output channel |
+|Minus from Art-Net channel | Minuses the given Art-Net channel data from this DMX output channel |
+|If 0, add from Art-Net channel | If this current DMX channel data is zero, then adds the given Art-Net channel data into this DMX channel |
+
 
 Notes:
   - Channel mods are applied in channel order starting from channel 1.  So if you mod channel 1 and then copy channel 1 to channel 10, then channel 10 will also have the channel 1 mod applied.
@@ -99,7 +104,13 @@ Notes:
  - Added 2 channel value modifiers
  - Channel mods setup page now lists channels that have mods with quick edit & remove buttons.
  - Fixed bug where device mac wasn't always showing on the WiFi setup page.
- 
+
+### Updated 1st August 2024
+ - Code cleaned up a little.
+ - Added even more channel value modifiers.
+ - Added a button to enable or disable Art-Net data copy into the DMX data.  Art-Net data can now be assigned with the new mods into the DMX channels.
+ - Added channel mod config download & upload.
+
 # Art-Net
 
 Art-Net(tm) is a trademark of Artistic Licence Holdings Ltd. The Art-Net protocol and associated documentation is copyright Artistic Licence Holdings Ltd.

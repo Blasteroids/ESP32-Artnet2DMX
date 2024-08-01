@@ -84,6 +84,10 @@ void WebpageBuilder::AddButtonActionForm( const String& form_action, const Strin
   m_html += "<form><button formaction=\"" + form_action + "\">" + display_name + "</button></form>";
 }
 
+void WebpageBuilder::AddButtonActionFormPost( const String& form_action, const String& display_name ) {
+  m_html += "<form method='post'><button type='submit' formaction='" + form_action + "'>" + display_name + "</button></form>";
+}
+
 void WebpageBuilder::AddTitle( const String& title ) {
   m_html += "<head><title>" + title + "</title></head>";
 }
@@ -201,4 +205,12 @@ void WebpageBuilder::AddSelectorNumberList( const String& name, const String& id
     m_html += ">" + String( i ) + "</option>";
   }
   m_html += "</select>";
+}
+
+void WebpageBuilder::AddFileDownloadLink( const String& filename, const String& text ) {
+  m_html += "<li><a href=\"/download?file=" + filename + "\">" + text + "</a></li>";
+}
+
+void WebpageBuilder::AddFileUpload() {
+  m_html += "<form action='/upload' method='post' enctype='multipart/form-data'><input type='file' name='file'><input type='submit' value='Upload'></form>";
 }

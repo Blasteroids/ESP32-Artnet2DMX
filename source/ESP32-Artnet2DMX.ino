@@ -22,11 +22,9 @@
 */
 
 #include <Arduino.h>
-#include <WebServer.h>
 
 #include "ESP32Artnet2DMX.h"
 
-WebServer       g_WebServer;
 ESP32Artnet2DMX g_Artnet2dmx;
 
 void setup() {
@@ -35,19 +33,11 @@ void setup() {
   }
   delay( 1000 );
 
-  // Callback for when web page is requested but not found.
-  g_WebServer.onNotFound( HandleWebServerData );
-  
   // Init
-  g_Artnet2dmx.Init( &g_WebServer ); //, &g_ArtnetWiFi );
+  g_Artnet2dmx.Init();
   
   // Start
   g_Artnet2dmx.Start();
-}
-
-void HandleWebServerData() {
-  // Let the config server know a request has been made.
-  g_Artnet2dmx.HandleWebServerData();
 }
 
 void loop() {

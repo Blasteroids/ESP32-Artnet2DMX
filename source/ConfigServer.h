@@ -2,19 +2,20 @@
 #define _CONFIGSERVER_H_
 
 #include <vector>
-#include <algorithm> // std::sort
 #include <WiFi.h>
 #include <WebServer.h>
+#include <uri/UriBraces.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include "FS.h"
 #include "WebpageBuilder.h"
-#include "ChannelMod.h"
+#include "ChannelModsHandler.h"
 
 const String HOTSPOT_SSID = "ESP32_ArtNet2DMX";
 const String HOTSPOT_PASS = "1234567890";  // Has to be minimum 10 digits?
 
-const String CONFIG_FILENAME = "/config.json";
+const String CONFIG_ADAPTER = "/config_adapter.json";
+const String CONFIG_MODS    = "/config_mods.json";
 
 class ConfigServer {
 public:
@@ -29,13 +30,11 @@ public:
   
   bool IsConnectedToWiFi();
 
-  void StartWebServer( WebServer* ptr_WebServer );
+  void StartWebServer();
 
   // Returns true if settings have changed.
   bool Update();
   
-  void HandleWebServerData();
-
   // WiFi settings
   String m_wifi_ssid;
   String m_wifi_pass;
@@ -55,7 +54,10 @@ public:
   bool            m_dmx_enabled;             // Enable/Disable dmx output.
 
   // DMX channel mods
-  std::vector< ChannelMod > m_channel_mods_vector;
+  bool m_channel_mods_copy_artnet_to_dmx;
+
+  const std::vector< ChannelMod >& GetModsVector() const;
+
 
 private:
   void ResetConfigToDefault();
@@ -73,31 +75,41 @@ private:
   void SendArtnet2DMXSetupPage();
   void SendChannelModsSetupPage();
   void SendChannelModsForChannelSetupPage( int channel_number );
+  void SendModConfigFile();
+  void Send200Response();
 
-  bool HandleWebGet();
-  bool HandleWebPost();
+  void HandleResetAll();
+  void HandleResetWiFi();
+  void HandleResetESP32Pins();
+  void HandleResetArtnet2DMX();
+  void HandleResetChannelMods();
 
-  bool HandleSetupWiFi();
-  bool HandleSetupESP32Pins();
-  bool HandleSetupArtnet2DMX();
-  bool HandleSetupChannelMods();
-  bool HandleSetupChannelModsForChannel( int channel_number );
+  void HandleDMXEnable();
+  void HandleDMXDisable();
+  void HandleCopyArtnetToDMXEnable();
+  void HandleCopyArtnetToDMXDisable();
 
-  // Should really make ChannelMod a class and put these as functions of it.
-  void         ChannelModsAddMod( unsigned int channel_number, unsigned int mod_type, unsigned int mod_value );
-  void         ChannelModsRemoveMod( unsigned int sequence_number );
-  void         ChannelModsSortBySequenceAndRenumber(); 
-  void         ChannelModsUpdateForModType( unsigned int sequence_number, unsigned int mod_type );
-  void         ChannelModsUpdateForModValue( unsigned int sequence_number, unsigned int mod_value );
-  unsigned int ChannelModsMaxSequence();
-  unsigned int ChannelModsNextSequenceForChannel( unsigned int channel_number );
-  void         ChannelModsRemoveAllForChannel( unsigned int channel_number );
+  void HandleSetupWiFi();
+  void HandleSetupESP32Pins();
+  void HandleSetupArtnet2DMX();
+  void HandleSetupChannelMods();
+  void HandleSetupChannelModsForChannel();
+  void HandleChannelModsEditFor();
+  void HandleChannelModsRemoveFor();
+  void HandleChannelModsAddFor();
+  void HandleChannelModsDelFor();
 
-  WebServer*     m_ptr_WebServer;
-  WebpageBuilder m_WebpageBuilder;
-  String         m_mac_address;
-  bool           m_settings_changed;
-  bool           m_is_connected_to_wifi;
+  void HandleWebServerDataOnNotFound();
+
+  void HandleFileUpload();
+
+  WebServer          m_WebServer;
+  WebpageBuilder     m_WebpageBuilder;
+  String             m_mac_address;
+  bool               m_settings_changed;
+  bool               m_is_connected_to_wifi;
+  File               m_file_being_uploaded;
+  ChannelModsHandler m_ChannelModsHandler;
 };
 
 #endif

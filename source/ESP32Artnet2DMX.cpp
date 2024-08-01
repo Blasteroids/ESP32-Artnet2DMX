@@ -14,7 +14,7 @@ ESP32Artnet2DMX::~ESP32Artnet2DMX() {
   this->Stop();
 }
 
-void ESP32Artnet2DMX::Init( WebServer* ptr_WebServer ) {
+void ESP32Artnet2DMX::Init() {
 
   // Init must be called because class constructor is not called by default on global var.
   m_ConfigServer.Init();
@@ -23,7 +23,7 @@ void ESP32Artnet2DMX::Init( WebServer* ptr_WebServer ) {
   m_ConfigServer.ConnectToWiFi();
 
   // Startup the webserver.
-  m_ConfigServer.StartWebServer( ptr_WebServer );
+  m_ConfigServer.StartWebServer();
 
   m_is_started = false;
 }
@@ -97,10 +97,6 @@ void ESP32Artnet2DMX::Update() {
   }
 }
 
-void ESP32Artnet2DMX::HandleWebServerData() {
-  m_ConfigServer.HandleWebServerData();
-}
-
 void ESP32Artnet2DMX::CheckForArtNetData() {
   int packet_size_in_bytes = m_WiFiUDP.parsePacket();
 
@@ -138,16 +134,13 @@ void ESP32Artnet2DMX::CheckForArtNetData() {
 
   switch( ptr_header->m_OpCode ) {
     case ARTNET_OPCODE_DMX: {
-      //Serial.printf( "GOT : DMX Packet\n" );
       this->HandleArtNetDMX( (ArtNetPacketDMX*)&m_data_buffer[ ARTNET_PACKET_PAYLOAD_START ] );
       break;
     }
     case ARTNET_OPCODE_POLL: {
-      //Serial.printf( "GOT : POLL Packet\n" );
       break;
     }
     case ARTNET_OPCODE_POLLREPLY: {
-      //Serial.printf( "GOT : POLLREPLY Packet\n" );
       break;
     }
     default: {
@@ -184,10 +177,14 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
 
   // Note: m_dmx_buffer[ 0 ] must be 0x00 which is DMX null start code.  Actual dmx channel data will start at m_dmx_buffer[ 1 ]
   //       ptr_packetdmx->m_Data[ 0 ] relates to first channel data, so the array needs to be adjusted.
-  memcpy( &m_dmx_buffer[ 1 ], ptr_packetdmx->m_Data, number_of_channels * sizeof( uint8_t ) );
+  if( m_ConfigServer.m_channel_mods_copy_artnet_to_dmx ) {
+    memcpy( &m_dmx_buffer[ 1 ], ptr_packetdmx->m_Data, number_of_channels * sizeof( uint8_t ) );
+  } else {
+    memset( m_dmx_buffer, 0, sizeof( m_dmx_buffer ) );
+  }
 
   // Process any channel mods
-  for( auto& mod: m_ConfigServer.m_channel_mods_vector ) {
+  for( const ChannelMod& mod : m_ConfigServer.GetModsVector() ) {
     if( mod.m_channel < 513 ) {
       switch( mod.m_mod_type ) {
         case CHANNELMODTYPE::EQUALS_VALUE: {
@@ -250,6 +247,32 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
           }
           break;
         }
+        case CHANNELMODTYPE::COPY_FROM_DMX: {
+          m_dmx_buffer[ mod.m_channel ] = ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+          break;
+        }
+        case CHANNELMODTYPE::ADD_FROM_DMX: {
+          if( m_dmx_buffer[ mod.m_channel ] > 255 - ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ] ) {
+            m_dmx_buffer[ mod.m_channel ] = 255;
+          } else {
+            m_dmx_buffer[ mod.m_channel ] += ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+          }
+          break;
+        }
+        case CHANNELMODTYPE::MINUS_FROM_DMX: {
+          if( m_dmx_buffer[ mod.m_channel ] < ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ] ) {
+            m_dmx_buffer[ mod.m_channel ] = 0;
+          } else {
+            m_dmx_buffer[ mod.m_channel ] -= ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+          }
+          break;
+        }
+        case CHANNELMODTYPE::IF_0_ADD_FROM_DMX: {
+          if( m_dmx_buffer[ mod.m_channel ] == 0 ) {
+            m_dmx_buffer[ mod.m_channel ] = ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+          }
+          break;
+        }
       }
     }
   }
@@ -262,7 +285,6 @@ void ESP32Artnet2DMX::SendDMX()
   if( !m_ConfigServer.m_dmx_enabled ) {
     return;
   }
-
   dmx_write( DMX_NUM_1, m_dmx_buffer, DMX_PACKET_SIZE );
   dmx_send_num( DMX_NUM_1, DMX_PACKET_SIZE );
   dmx_wait_sent( DMX_NUM_1, DMX_TIMEOUT_TICK );

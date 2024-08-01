@@ -20,9 +20,11 @@ void ConfigServer::Init() {
 }
 
 void ConfigServer::ResetConfigToDefault() {
+
   // Remove existing settings file.
   if( LittleFS.begin( false ) ) {
-    LittleFS.remove( CONFIG_FILENAME );
+    LittleFS.remove( CONFIG_ADAPTER );
+    LittleFS.remove( CONFIG_MODS );
   }
 
   // Reset all config
@@ -31,7 +33,7 @@ void ConfigServer::ResetConfigToDefault() {
   this->ResetArtnet2DMXToDefault();
   this->ResetChannelModsToDefault();
 
-  // Shows on first page
+  // Disable DMX output
   m_dmx_enabled = false;
 }
 
@@ -53,7 +55,8 @@ void ConfigServer::ResetESP32PinsToDefault() {
 }
 
 void ConfigServer::ResetChannelModsToDefault() {
-  m_channel_mods_vector.clear();
+  m_channel_mods_copy_artnet_to_dmx = true;
+  m_ChannelModsHandler.Clear();
 }
 
 void ConfigServer::ResetArtnet2DMXToDefault() {
@@ -64,6 +67,18 @@ void ConfigServer::ResetArtnet2DMXToDefault() {
 }
 
 void ConfigServer::SettingsSave() {
+  // Start LittleFS
+  if( !LittleFS.begin( false ) ) {
+    Serial.println( "LittleFS failed.  Attempting format." );
+    if( !LittleFS.begin( true ) ) {
+      Serial.println( "LittleFS failed format. Config saving aborted." );
+      return;     
+    } else {
+      Serial.println( "LittleFS: Formatted" );
+    }
+  }
+
+  // Adapter config
   DynamicJsonDocument doc( 32768 );
   doc[ "wifi_ssid" ]              = m_wifi_ssid;
   doc[ "wifi_pass" ]              = m_wifi_pass;
@@ -78,8 +93,19 @@ void ConfigServer::SettingsSave() {
   doc[ "dmx_update_interval_ms" ] = m_dmx_update_interval_ms;
   doc[ "dmx_enabled" ]            = m_dmx_enabled;
 
+  File config_adapter = LittleFS.open( CONFIG_ADAPTER, "w" );
+  serializeJson( doc, config_adapter );
+  config_adapter.close();
+
+  // Clear out json
+  doc.clear();
+
+  doc[ "copy_artnet_to_dmx" ] = m_channel_mods_copy_artnet_to_dmx;
+
+  // Mods config
   JsonArray array_channelmods = doc.createNestedArray( "channel_mods" );
-  for( ChannelMod& mod : m_channel_mods_vector ) {
+
+  for( const ChannelMod& mod : m_ChannelModsHandler.GetModsVector() ) {
     JsonObject obj     = array_channelmods.createNestedObject();
     obj[ "sequence" ]  = mod.m_sequence;
     obj[ "channel" ]   = mod.m_channel;
@@ -87,20 +113,9 @@ void ConfigServer::SettingsSave() {
     obj[ "mod_value" ] = mod.m_mod_value;
   }
 
-  // Start LittleFS
-  if( !LittleFS.begin( false ) ) {
-    Serial.println( "LittleFS failed.  Attempting format." );
-    if( !LittleFS.begin( true ) ) {
-      Serial.println( "LittleFS failed format. Config saving aborted." );
-      return;     
-    } else {
-      Serial.println( "LittleFS: Formatted" );
-    }
-  }
-
-  File config_file = LittleFS.open( CONFIG_FILENAME, "w" );
-  serializeJson( doc, config_file );
-  config_file.close();
+  File config_mods = LittleFS.open( CONFIG_MODS, "w" );
+  serializeJson( doc, config_mods );
+  config_mods.close();
 
   m_settings_changed = true;
 }
@@ -113,16 +128,17 @@ bool ConfigServer::SettingsLoad() {
   }
 
   DynamicJsonDocument doc( 32768 );
-  File config_file = LittleFS.open( CONFIG_FILENAME, "r" );
+  File config_adapter = LittleFS.open( CONFIG_ADAPTER, "r" );
 
-  if( !config_file ) {
+  if( !config_adapter ) {
     // File not exist.
-    Serial.println( "Failed to load file" );
+    Serial.println( "Failed to load adapter config file." );
     return false;
   }
 
-  deserializeJson( doc, config_file );
-  config_file.close();
+  // Adapter config
+  deserializeJson( doc, config_adapter );
+  config_adapter.close();
 
   m_wifi_ssid              = doc[ "wifi_ssid" ].as<String>();
   m_wifi_pass              = doc[ "wifi_pass" ].as<String>();
@@ -137,7 +153,25 @@ bool ConfigServer::SettingsLoad() {
   m_dmx_update_interval_ms = doc[ "dmx_update_interval_ms" ];
   m_dmx_enabled            = doc[ "dmx_enabled" ];
 
-  m_channel_mods_vector.clear();
+  // Clear out json
+  doc.clear();
+
+  // Mods config
+  File config_mods = LittleFS.open( CONFIG_MODS, "r" );
+
+  if( !config_mods ) {
+    // File not exist.
+    Serial.println( "Failed to load adapter config file." );
+    return false;
+  }
+
+  deserializeJson( doc, config_mods );
+  config_mods.close();
+
+  m_channel_mods_copy_artnet_to_dmx = doc[ "copy_artnet_to_dmx" ];
+
+  m_ChannelModsHandler.Clear();
+
   JsonArray array_channelmods = doc[ "channel_mods" ];
   for( const JsonObject& obj : array_channelmods ) {
     ChannelMod mod;
@@ -145,15 +179,10 @@ bool ConfigServer::SettingsLoad() {
     mod.m_channel   = obj[ "channel" ];
     mod.m_mod_type  = obj[ "mod_type" ];
     mod.m_mod_value = obj[ "mod_value" ];
-    m_channel_mods_vector.push_back( mod );
+    m_ChannelModsHandler.AddMod( mod );
   }
 
   return true;
-}
-
-void ConfigServer::StartWebServer( WebServer* ptr_WebServer ) {
-  m_ptr_WebServer = ptr_WebServer;
-  m_ptr_WebServer->begin();
 }
 
 bool ConfigServer::ConnectToWiFi() {
@@ -213,9 +242,46 @@ bool ConfigServer::IsConnectedToWiFi() {
   return m_is_connected_to_wifi;
 }
 
+void ConfigServer::StartWebServer() {
+  m_WebServer.onNotFound( std::bind( &ConfigServer::HandleWebServerDataOnNotFound, this ) );
+
+  m_WebServer.on( "/", HTTP_GET, std::bind( &ConfigServer::SendSetupMenuPage, this ) );
+
+  m_WebServer.on( "/reset_all", HTTP_GET, std::bind( &ConfigServer::HandleResetAll, this ) );
+  m_WebServer.on( "/reset_wifi", HTTP_GET, std::bind( &ConfigServer::HandleResetWiFi, this ) );
+  m_WebServer.on( "/reset_esp32pins", HTTP_GET, std::bind( &ConfigServer::HandleResetESP32Pins, this ) );
+  m_WebServer.on( "/reset_artnew2dmx", HTTP_GET, std::bind( &ConfigServer::HandleResetArtnet2DMX, this ) );
+  m_WebServer.on( "/reset_channelmods", HTTP_GET, std::bind( &ConfigServer::HandleResetChannelMods, this ) );
+
+  m_WebServer.on( "/settings_wifi", HTTP_GET, std::bind( &ConfigServer::SendWiFiSetupPage, this ) );
+  m_WebServer.on( "/settings_esp32pins", HTTP_GET, std::bind( &ConfigServer::SendESP32PinsSetupPage, this ) );
+  m_WebServer.on( "/settings_artnet2dmx", HTTP_GET, std::bind( &ConfigServer::SendArtnet2DMXSetupPage, this ) );
+  m_WebServer.on( "/settings_channelmods", HTTP_GET, std::bind( &ConfigServer::SendChannelModsSetupPage, this ) );
+  m_WebServer.on( "/download", HTTP_GET, std::bind( &ConfigServer::SendModConfigFile, this ) ); // There's only 1 download, so ignoring filename.
+
+  m_WebServer.on( "/upload", HTTP_POST, std::bind( &ConfigServer::Send200Response, this ), std::bind( &ConfigServer::HandleFileUpload, this ) );
+  m_WebServer.on( "/dmx_enable", HTTP_POST, std::bind( &ConfigServer::HandleDMXEnable, this ) );
+  m_WebServer.on( "/dmx_disable", HTTP_POST, std::bind( &ConfigServer::HandleDMXDisable, this ) );
+  m_WebServer.on( "/copy_artnet_enable", HTTP_POST, std::bind( &ConfigServer::HandleCopyArtnetToDMXEnable, this ) );
+  m_WebServer.on( "/copy_artnet_disable", HTTP_POST, std::bind( &ConfigServer::HandleCopyArtnetToDMXDisable, this ) );
+
+  m_WebServer.on( "/setup_wifi", HTTP_POST, std::bind( &ConfigServer::HandleSetupWiFi, this ) );
+  m_WebServer.on( "/setup_esp32pins", HTTP_POST, std::bind( &ConfigServer::HandleSetupESP32Pins, this ) );
+  m_WebServer.on( "/setup_artnet2dmx", HTTP_POST, std::bind( &ConfigServer::HandleSetupArtnet2DMX, this ) );
+  m_WebServer.on( "/setup_channelmods", HTTP_POST, std::bind( &ConfigServer::HandleSetupChannelMods, this ) );
+  
+  m_WebServer.on( UriBraces("/setup_channelmodsfor/{}"), HTTP_POST, std::bind( &ConfigServer::HandleSetupChannelModsForChannel, this ) );
+  m_WebServer.on( UriBraces("/mods_editfor/{}"), HTTP_POST, std::bind( &ConfigServer::HandleChannelModsEditFor, this ) );
+  m_WebServer.on( UriBraces("/mods_removefor/{}"), HTTP_POST, std::bind( &ConfigServer::HandleChannelModsRemoveFor, this ) );
+  m_WebServer.on( UriBraces("/mods_addfor/{}"), HTTP_POST, std::bind( &ConfigServer::HandleChannelModsAddFor, this ) );
+  m_WebServer.on( UriBraces("/mods_delfor/{}/{}"), HTTP_POST, std::bind( &ConfigServer::HandleChannelModsDelFor, this ) );
+
+  m_WebServer.begin();
+}
+
 bool ConfigServer::Update() {
 
-  m_ptr_WebServer->handleClient();
+  m_WebServer.handleClient();
 
   if( m_settings_changed ) {
     m_settings_changed = false;
@@ -223,6 +289,10 @@ bool ConfigServer::Update() {
   }
 
   return false;
+}
+
+const std::vector< ChannelMod >& ConfigServer::GetModsVector() const {
+  return m_ChannelModsHandler.GetModsVector();
 }
 
 void ConfigServer::SendSetupMenuPage() {
@@ -243,14 +313,14 @@ void ConfigServer::SendSetupMenuPage() {
   m_WebpageBuilder.AddButtonActionForm( "settings_channelmods", "Channel Mods" );
 
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddLabel( "note", "It's advisable to disable DMX during setup." );
+  m_WebpageBuilder.AddLabel( "note", "It's advisable to disable DMX output during setup." );
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddLabel( "dmx_status", "DMX Status" );
-  m_WebpageBuilder.AddBreak( 2 );
+  m_WebpageBuilder.AddBreak( 1 );
   if( m_dmx_enabled ) {
-    m_WebpageBuilder.AddButtonActionForm( "dmx_disable", "ENABLED" );
+    m_WebpageBuilder.AddButtonActionFormPost( "dmx_disable", "ENABLED" );
   } else {
-    m_WebpageBuilder.AddButtonActionForm( "dmx_enable", "DISABLED" );
+    m_WebpageBuilder.AddButtonActionFormPost( "dmx_enable", "DISABLED" );
   }
 
   // Reset button
@@ -261,7 +331,7 @@ void ConfigServer::SendSetupMenuPage() {
   m_WebpageBuilder.EndBody();
   m_WebpageBuilder.EndPage();
 
-  m_ptr_WebServer->send( 200, "text/html", m_WebpageBuilder.m_html );
+  m_WebServer.send( 200, "text/html", m_WebpageBuilder.m_html );
 }
 
 void ConfigServer::SendWiFiSetupPage() {
@@ -305,7 +375,7 @@ void ConfigServer::SendWiFiSetupPage() {
   m_WebpageBuilder.EndBody();
   m_WebpageBuilder.EndPage();
 
-  m_ptr_WebServer->send( 200, "text/html", m_WebpageBuilder.m_html );
+  m_WebServer.send( 200, "text/html", m_WebpageBuilder.m_html );
 }
 
 void ConfigServer::SendESP32PinsSetupPage() {
@@ -348,7 +418,7 @@ void ConfigServer::SendESP32PinsSetupPage() {
   m_WebpageBuilder.EndBody();
   m_WebpageBuilder.EndPage();
 
-  m_ptr_WebServer->send( 200, "text/html", m_WebpageBuilder.m_html );
+  m_WebServer.send( 200, "text/html", m_WebpageBuilder.m_html );
 }
 
 void ConfigServer::SendArtnet2DMXSetupPage() {
@@ -393,7 +463,7 @@ void ConfigServer::SendArtnet2DMXSetupPage() {
   m_WebpageBuilder.EndBody();
   m_WebpageBuilder.EndPage();
 
-  m_ptr_WebServer->send( 200, "text/html", m_WebpageBuilder.m_html );
+  m_WebServer.send( 200, "text/html", m_WebpageBuilder.m_html );
 }
 
 void ConfigServer::SendChannelModsSetupPage() {
@@ -404,8 +474,16 @@ void ConfigServer::SendChannelModsSetupPage() {
   m_WebpageBuilder.AddHeading( "Channel Mods Setup" );
   m_WebpageBuilder.AddBreak( 3 );
   
-  m_WebpageBuilder.AddFormAction( "/setup_channelmods", "POST" );
+  m_WebpageBuilder.AddLabel( "copy_artnet_status", "Copy Artnet to DMX" );
+  m_WebpageBuilder.AddBreak( 1 );
+  if( m_channel_mods_copy_artnet_to_dmx ) {
+    m_WebpageBuilder.AddButtonActionFormPost( "copy_artnet_disable", "ENABLED" );
+  } else {
+    m_WebpageBuilder.AddButtonActionFormPost( "copy_artnet_enable", "DISABLED" );
+  }
 
+  m_WebpageBuilder.AddFormAction( "/setup_channelmods", "POST" );
+  m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddLabel( "Channel Mods", "Select channel to setup." );
   m_WebpageBuilder.AddBreak( 1 );
   m_WebpageBuilder.AddSelectorNumberList( "channel", "Select channel", 1, 512, 1 );
@@ -415,13 +493,19 @@ void ConfigServer::SendChannelModsSetupPage() {
   m_WebpageBuilder.AddButton( "submit", "ADD NEW" );
   m_WebpageBuilder.EndFormAction();
 
+  m_WebpageBuilder.AddBreak( 3 );
+  m_WebpageBuilder.AddFileDownloadLink( "config_mods.json", "Click to download config_mods.json" );
+
+  m_WebpageBuilder.AddBreak( 2 );
+  m_WebpageBuilder.AddFileUpload();
+
   // Cancel button
   m_WebpageBuilder.AddBreak( 3 );
   m_WebpageBuilder.AddButtonActionForm( "/", "RETURN TO MAIN MENU" );
 
   // Reset button
   m_WebpageBuilder.AddBreak( 3 );
-  m_WebpageBuilder.AddButtonActionForm( "reset_channelmods", "RESET ALL CHANNEL MODS TO DEFAULT" );
+  m_WebpageBuilder.AddButtonActionForm( "/reset_channelmods", "RESET ALL CHANNEL MODS TO DEFAULT" );
 
   // Edit & Remove buttons for existing channels with mods
   m_WebpageBuilder.AddBreak( 3 );
@@ -438,15 +522,15 @@ void ConfigServer::SendChannelModsSetupPage() {
     channel_has_mods[ i ] = false;
   }
 
-  for( std::vector<ChannelMod>::iterator ptr_mod = m_channel_mods_vector.begin(); ptr_mod != m_channel_mods_vector.end(); ++ptr_mod ) {
-    channel_has_mods[ ptr_mod->m_channel ] = true;
+  for( const ChannelMod& mod : m_ChannelModsHandler.GetModsVector() ) {
+    channel_has_mods[ mod.m_channel ] = true;
   }
 
   for(int i = 1; i < 512; ++i) {
     if( channel_has_mods[ i ] ) {
       m_WebpageBuilder.AddGridCellText( String( i ) );
-      m_WebpageBuilder.AddButtonAction( "channelmods_edit" + String( i ), "Edit" );
-      m_WebpageBuilder.AddButtonAction( "channelmods_remove" + String( i ), "Remove" );
+      m_WebpageBuilder.AddButtonAction( "/mods_editfor/" + String( i ), "Edit" );
+      m_WebpageBuilder.AddButtonAction( "/mods_removefor/" + String( i ), "Remove" );
     }
   }
 
@@ -456,7 +540,7 @@ void ConfigServer::SendChannelModsSetupPage() {
   m_WebpageBuilder.EndBody();
   m_WebpageBuilder.EndPage();
 
-  m_ptr_WebServer->send( 200, "text/html", m_WebpageBuilder.m_html );
+  m_WebServer.send( 200, "text/html", m_WebpageBuilder.m_html );
 }
 
 void ConfigServer::SendChannelModsForChannelSetupPage( int channel_number ) {
@@ -470,31 +554,32 @@ void ConfigServer::SendChannelModsForChannelSetupPage( int channel_number ) {
   m_WebpageBuilder.AddBreak( 3 );
   
   m_WebpageBuilder.AddGridStyle( "grid-container", 3 );
-  m_WebpageBuilder.AddFormAction( "/setup_channelmodsfor" + String( channel_number), "POST" );
+  m_WebpageBuilder.AddFormAction( "/", "POST" );
   m_WebpageBuilder.StartDivClass( "grid-container" );
 
   m_WebpageBuilder.AddGridCellText( "Modifier" );
   m_WebpageBuilder.AddGridCellText( "Value" );
-  m_WebpageBuilder.AddButtonAction( "mod_add_" + String( channel_number ), "Add Mod" );
+  m_WebpageBuilder.AddButtonAction( "/mods_addfor/" + String( channel_number ), "Add Mod" );
 
   // Itr for each mod to find the ones for this channel
   int mod_position = 0;
-  for( std::vector<ChannelMod>::iterator ptr_mod = m_channel_mods_vector.begin(); ptr_mod != m_channel_mods_vector.end(); ++ptr_mod ) {
-    if( ptr_mod->m_channel == channel_number ) {
+
+  for( const ChannelMod& mod : m_ChannelModsHandler.GetModsVector() ) {
+    if( mod.m_channel == channel_number ) {
       // Add mod type
-      m_WebpageBuilder.m_html += "<select name=\"mod_type_" + String( ptr_mod->m_sequence ) + "\" id=\"Mod Type\">";
+      m_WebpageBuilder.m_html += "<select name=\"mod_type_" + String( mod.m_sequence ) + "\" id=\"Mod Type\">";
       for( int mod_type = 0; mod_type <= CHANNELMODTYPE::MAX; mod_type++ )
       {
         m_WebpageBuilder.m_html +=  "<option value=\"" + String( mod_type ) + "\"";
-        if( ptr_mod->m_mod_type == mod_type ) {
+        if( mod.m_mod_type == mod_type ) {
           m_WebpageBuilder.m_html += " selected";
         }
         m_WebpageBuilder.m_html += ">" + String( ModTypeAsString( mod_type ) ) + "</option>";
       }
       m_WebpageBuilder.m_html += "</select>";
       // Add value
-      m_WebpageBuilder.AddGridEntryNumberCell( "mod_value_" + String( ptr_mod->m_sequence ), ptr_mod->m_mod_value, 0, 512, true );
-      m_WebpageBuilder.AddButtonAction( "mod_del_" + String( ptr_mod->m_sequence ) + "C" + String( channel_number ), "Remove Mod" );
+      m_WebpageBuilder.AddGridEntryNumberCell( "mod_value_" + String( mod.m_sequence ), mod.m_mod_value, 0, 512, true );
+      m_WebpageBuilder.AddButtonAction( "/mods_delfor/" + String( channel_number ) + "/" + String( mod.m_sequence ), "Remove Mod" );
     }
     mod_position++;
   }
@@ -505,9 +590,8 @@ void ConfigServer::SendChannelModsForChannelSetupPage( int channel_number ) {
   m_WebpageBuilder.AddGridCellText( "" );
 
   // Submit button
-  //m_WebpageBuilder.AddBreak( 3 );
   m_WebpageBuilder.AddGridCellText( "" );
-  m_WebpageBuilder.AddButtonAction( "setup_channelmodsfor" + String( channel_number ), "SAVE" );
+  m_WebpageBuilder.AddButtonAction( "/setup_channelmodsfor/" + String( channel_number ), "SAVE" );
   m_WebpageBuilder.AddGridCellText( "" );
 
   m_WebpageBuilder.EndFormAction();
@@ -522,154 +606,111 @@ void ConfigServer::SendChannelModsForChannelSetupPage( int channel_number ) {
   m_WebpageBuilder.EndBody();
   m_WebpageBuilder.EndPage();
 
-  m_ptr_WebServer->send( 200, "text/html", m_WebpageBuilder.m_html );
+  m_WebServer.send( 200, "text/html", m_WebpageBuilder.m_html );
 
 }
 
-void ConfigServer::HandleWebServerData() {
-  bool handled = false;
-  
-  // Allow reset before anything else.
-  if( m_ptr_WebServer->uri() == String( "/reset_all" ) ) {
-    m_ptr_WebServer->send( 200, "text/plain", "Resetting everything to defaults - Reconnect to hotspot to setup WiFi." );
-    delay( 2000 );
-    this->ResetConfigToDefault();
-    this->SettingsSave();
-    this->ConnectToWiFi();
-    return;
-  } else if( m_ptr_WebServer->uri() == String( "/reset_wifi" ) ) {
-    m_ptr_WebServer->send( 200, "text/plain", "Resetting to WiFi defaults - Reconnect to hotspot to setup WiFi." );
-    delay( 2000 );
-    this->ResetWiFiToDefault();
-    this->SettingsSave();
-    this->ConnectToWiFi();
-    return;
-  } else if( m_ptr_WebServer->uri() == String( "/reset_esp32pins" ) ) {
-    this->ResetESP32PinsToDefault();
-    this->SettingsSave();
-    this->SendESP32PinsSetupPage();
-    return;
-  } else if( m_ptr_WebServer->uri() == String( "/reset_artnew2dmx" ) ) {
-    this->ResetArtnet2DMXToDefault();
-    this->SettingsSave();
-    this->SendArtnet2DMXSetupPage();
-    return;
-  } else if( m_ptr_WebServer->uri() == String( "/reset_channelmods" ) ) {
-    this->ResetChannelModsToDefault();
-    this->SettingsSave();
-    this->SendChannelModsSetupPage();
-    return;
-  }
+void ConfigServer::SendModConfigFile() {
+  String filename = CONFIG_MODS;
 
-  if( m_ptr_WebServer->method() == HTTP_GET ) {
-    // GET
-    handled = this->HandleWebGet();
+  if( LittleFS.exists( filename ) ) {
+    String filenameonly = filename;
+    int last_slash_position = filename.lastIndexOf( '/' );
+    if( last_slash_position != -1 ) {
+        filenameonly = filename.substring( last_slash_position + 1 );
+    } else {
+        filenameonly = filename;
+    }
+    File file = LittleFS.open( filename, "r" );
+    m_WebServer.sendHeader( "Content-Disposition", "attachment; filename=\"" + filenameonly + "\"" );
+    m_WebServer.streamFile( file, "application/octet-stream" );
+    file.close();
+
+    this->SendChannelModsSetupPage();
   } else {
-    // POST
-    handled = this->HandleWebPost();
-  }
-
-  if( !handled ) {
-    m_ptr_WebServer->send( 200, "text/plain", "Not found!" );
-  }
+    m_WebServer.send( 200, "text/plain", "Not found!" );
+    delay( 4000 );
+    Serial.printf("File not sent.\n");
+  }  
 }
 
-bool ConfigServer::HandleWebGet() {
-  // Get starts with a /
+void ConfigServer::Send200Response() {
+  m_WebServer.send( 200 );
+}
 
-  if( m_ptr_WebServer->uri() == "/settings_wifi" ) {
-    this->SendWiFiSetupPage();
-  } else if( m_ptr_WebServer->uri() == "/settings_esp32pins" ) {
-    this->SendESP32PinsSetupPage();
-  } else if( m_ptr_WebServer->uri() == "/settings_artnet2dmx" ) {
-    this->SendArtnet2DMXSetupPage();
-  } else if( m_ptr_WebServer->uri() == "/settings_channelmods" ) {
-    this->SendChannelModsSetupPage();
-  } else if( m_ptr_WebServer->uri() == "/dmx_disable" ) {
-    m_dmx_enabled = false;
-    this->SettingsSave();
-    this->SendSetupMenuPage();
-  } else if( m_ptr_WebServer->uri() == "/dmx_enable" ) {
+void ConfigServer::HandleResetAll() {
+  m_WebServer.send( 200, "text/plain", "Resetting everything to defaults - Reconnect to hotspot to setup WiFi." );
+  delay( 4000 );
+  this->ResetConfigToDefault();
+  this->SettingsSave();
+  this->ConnectToWiFi();
+}
+
+void ConfigServer::HandleResetWiFi() {
+  m_WebServer.send( 200, "text/plain", "Resetting to WiFi defaults - Reconnect to hotspot to setup WiFi." );
+  delay( 4000 );
+  this->ResetWiFiToDefault();
+  this->SettingsSave();
+  this->ConnectToWiFi();
+}
+
+void ConfigServer::HandleResetESP32Pins() {
+  this->ResetESP32PinsToDefault();
+  this->SettingsSave();
+  this->SendESP32PinsSetupPage();
+}
+
+void ConfigServer::HandleResetArtnet2DMX() {
+  this->ResetArtnet2DMXToDefault();
+  this->SettingsSave();
+  this->SendArtnet2DMXSetupPage();
+}
+
+void ConfigServer::HandleResetChannelMods() {
+  this->ResetChannelModsToDefault();
+  this->SettingsSave();
+  this->SendChannelModsSetupPage();
+}
+
+void ConfigServer::HandleDMXEnable() {
     m_dmx_enabled = true;
     this->SettingsSave();
     this->SendSetupMenuPage();
-  } else {
-    // Always send setup page.  
-    this->SendSetupMenuPage();
-  }
-  return true;
 }
 
-bool ConfigServer::HandleWebPost() {
-  
-  if( m_ptr_WebServer->uri() == "/setup_wifi" ) {
-    if( this->HandleSetupWiFi() ) {
-      Serial.printf( "Restarting WiFi\n" );
-      this->ConnectToWiFi();
-      return true;
-    }
-  } else if( m_ptr_WebServer->uri() == "/setup_esp32pins" ) {
-    this->HandleSetupESP32Pins();
-    this->SendSetupMenuPage();
-    return true;
-  } else if( m_ptr_WebServer->uri() == "/setup_artnet2dmx" ) {
-    this->HandleSetupArtnet2DMX();
-    this->SendSetupMenuPage();
-    return true;
-  } else if( m_ptr_WebServer->uri() == "/setup_channelmods" ) {
-    this->HandleSetupChannelMods();
-    this->SendSetupMenuPage();
-    return true;
-  } else if( m_ptr_WebServer->uri().startsWith( "/setup_channelmodsfor" ) ) {
-    unsigned int channel = m_ptr_WebServer->uri().substring( 21 ).toInt();
-    this->HandleSetupChannelModsForChannel( channel );
-    this->SendChannelModsForChannelSetupPage( channel );
-    return true;
-  } else if( m_ptr_WebServer->uri().startsWith( "/mod_add_" ) ) {
-    unsigned int channel = m_ptr_WebServer->uri().substring( 9 ).toInt();
-    this->ChannelModsAddMod( channel, CHANNELMODTYPE::NOTHING, 0 );
+void ConfigServer::HandleDMXDisable() {
+    m_dmx_enabled = true;
     this->SettingsSave();
-    this->SendChannelModsForChannelSetupPage( channel );
-    return true;
-  } else if( m_ptr_WebServer->uri().startsWith( "/mod_del_" ) ) {
-    size_t position_of_channel = m_ptr_WebServer->uri().indexOf( 'C' );
-    unsigned int sequence_number = m_ptr_WebServer->uri().substring( 9, position_of_channel ).toInt();
-    unsigned int channel = m_ptr_WebServer->uri().substring( position_of_channel + 1 ).toInt();
-    this->ChannelModsRemoveMod( sequence_number );
-    this->SettingsSave();
-    this->SendChannelModsForChannelSetupPage( channel );
-    return true;
-  } else if ( m_ptr_WebServer->uri().startsWith( "/channelmods_edit" ) ) {
-    unsigned int channel = m_ptr_WebServer->uri().substring( 17 ).toInt();
-    this->SendChannelModsForChannelSetupPage( channel );
-    return true;
-  } else if ( m_ptr_WebServer->uri().startsWith( "/channelmods_remove" ) ) {
-    unsigned int channel = m_ptr_WebServer->uri().substring( 19 ).toInt();
-    this->ChannelModsRemoveAllForChannel( channel );
-    this->SettingsSave();
-    this->SendChannelModsSetupPage();
-    return true;
-  } else {
-    Serial.printf("Unhandled WebPost = %s\n", m_ptr_WebServer->uri() );
-  }
-  return false;
+    this->SendSetupMenuPage();
 }
 
-bool ConfigServer::HandleSetupWiFi() {  
+void ConfigServer::HandleCopyArtnetToDMXEnable() {
+  m_channel_mods_copy_artnet_to_dmx = true;
+  this->SettingsSave();
+  this->SendChannelModsSetupPage();
+}
+
+void ConfigServer::HandleCopyArtnetToDMXDisable() {
+  m_channel_mods_copy_artnet_to_dmx = false;
+  this->SettingsSave();
+  this->SendChannelModsSetupPage();
+}
+
+void ConfigServer::HandleSetupWiFi() {  
   String wifi_ssid_new   = "";
   String wifi_pass_new   = "";
   String wifi_ip_new     = "";
   String wifi_subnet_new = "";
 
-  for( int i = 0; i < m_ptr_WebServer->args(); i++ ) {
-    if( m_ptr_WebServer->argName( i ) == "wifi_ssid" ) {
-      wifi_ssid_new = m_ptr_WebServer->arg( i );
-    } else if( m_ptr_WebServer->argName( i ) == "wifi_pass" ) {
-      wifi_pass_new = m_ptr_WebServer->arg( i );
-    } else if( m_ptr_WebServer->argName( i ) == "ip" ) {
-      wifi_ip_new = m_ptr_WebServer->arg( i );
-    } else if( m_ptr_WebServer->argName( i ) == "subnet" ) {
-      wifi_subnet_new = m_ptr_WebServer->arg( i );
+  for( int i = 0; i < m_WebServer.args(); i++ ) {
+    if( m_WebServer.argName( i ) == "wifi_ssid" ) {
+      wifi_ssid_new = m_WebServer.arg( i );
+    } else if( m_WebServer.argName( i ) == "wifi_pass" ) {
+      wifi_pass_new = m_WebServer.arg( i );
+    } else if( m_WebServer.argName( i ) == "ip" ) {
+      wifi_ip_new = m_WebServer.arg( i );
+    } else if( m_WebServer.argName( i ) == "subnet" ) {
+      wifi_subnet_new = m_WebServer.arg( i );
     }
   }
 
@@ -683,169 +724,148 @@ bool ConfigServer::HandleSetupWiFi() {
       m_wifi_subnet = wifi_subnet_new;
     }
 
-    m_ptr_WebServer->send( 200, "text/plain", "Attempting to connect to WiFi. On failure hotspot will re-appear." );
+    m_WebServer.send( 200, "text/plain", "Attempting to connect to WiFi. On failure hotspot will re-appear." );
      
     if( this->ConnectToWiFi() ) {
       this->SettingsSave();
     }
-    return true;
+
+    Serial.printf( "Restarting WiFi\n" );
+    this->ConnectToWiFi();
   }
-  return false;
 }
 
-bool ConfigServer::HandleSetupESP32Pins() {  
+void ConfigServer::HandleSetupESP32Pins() {  
 
-  for( int i = 0; i < m_ptr_WebServer->args(); i++ ) {
-    if( m_ptr_WebServer->argName( i ) == "gpio_enable" ) {
-      m_gpio_enable = m_ptr_WebServer->arg( i ).toInt();
-    } else if( m_ptr_WebServer->argName( i ) == "gpio_transmit" ) {
-      m_gpio_transmit = m_ptr_WebServer->arg( i ).toInt();
-    } else if( m_ptr_WebServer->argName( i ) == "gpio_receive" ) {
-      m_gpio_receive = m_ptr_WebServer->arg( i ).toInt();
+  for( int i = 0; i < m_WebServer.args(); i++ ) {
+    if( m_WebServer.argName( i ) == "gpio_enable" ) {
+      m_gpio_enable = m_WebServer.arg( i ).toInt();
+    } else if( m_WebServer.argName( i ) == "gpio_transmit" ) {
+      m_gpio_transmit = m_WebServer.arg( i ).toInt();
+    } else if( m_WebServer.argName( i ) == "gpio_receive" ) {
+      m_gpio_receive = m_WebServer.arg( i ).toInt();
     }
   }
 
   this->SettingsSave();
-
-  return true;
+  this->SendSetupMenuPage();
 }
 
-bool ConfigServer::HandleSetupArtnet2DMX() {  
-  for( int i = 0; i < m_ptr_WebServer->args(); i++ ) {
-    if( m_ptr_WebServer->argName( i ) == "artnet_source_ip" ) {
-      m_artnet_source_ip = m_ptr_WebServer->arg( i );
-    } else if( m_ptr_WebServer->argName( i ) == "artnet_universe" ) {
-      m_artnet_universe = m_ptr_WebServer->arg( i ).toInt();
-    } else if( m_ptr_WebServer->argName( i ) == "dmx_update_ms" ) {
-      m_dmx_update_interval_ms = m_ptr_WebServer->arg( i ).toInt();
-    } else if( m_ptr_WebServer->argName( i ) == "artnet_timeout_ms" ) {
-      m_artnet_timeout_ms = m_ptr_WebServer->arg( i ).toInt();
+void ConfigServer::HandleSetupArtnet2DMX() {  
+  for( int i = 0; i < m_WebServer.args(); i++ ) {
+    if( m_WebServer.argName( i ) == "artnet_source_ip" ) {
+      m_artnet_source_ip = m_WebServer.arg( i );
+    } else if( m_WebServer.argName( i ) == "artnet_universe" ) {
+      m_artnet_universe = m_WebServer.arg( i ).toInt();
+    } else if( m_WebServer.argName( i ) == "dmx_update_ms" ) {
+      m_dmx_update_interval_ms = m_WebServer.arg( i ).toInt();
+    } else if( m_WebServer.argName( i ) == "artnet_timeout_ms" ) {
+      m_artnet_timeout_ms = m_WebServer.arg( i ).toInt();
     }
   }
 
   this->SettingsSave();
-
-  return true;
+  this->SendSetupMenuPage();
 }
 
-bool ConfigServer::HandleSetupChannelMods() {  
-  for( int i = 0; i < m_ptr_WebServer->args(); i++ ) {
-    if( m_ptr_WebServer->argName( i ) == "channel" ) {
-      this->SendChannelModsForChannelSetupPage( m_ptr_WebServer->arg( i ).toInt() );
+void ConfigServer::HandleSetupChannelMods() {  
+  for( int i = 0; i < m_WebServer.args(); i++ ) {
+    if( m_WebServer.argName( i ) == "channel" ) {
+      this->SendChannelModsForChannelSetupPage( m_WebServer.arg( i ).toInt() );
       break;
     }
   }
-  
-  return true;
+
+  this->SendSetupMenuPage();
 }
 
-bool ConfigServer::HandleSetupChannelModsForChannel( int channel_number ) {
+void ConfigServer::HandleSetupChannelModsForChannel() {
   int sequence_number;
-  for( int i = 0; i < m_ptr_WebServer->args(); i++ ) {
-    if( m_ptr_WebServer->argName( i ).startsWith( "mod_type_" ) ) {
-      sequence_number = m_ptr_WebServer->argName( i ).substring( 9 ).toInt();
-      this->ChannelModsUpdateForModType( sequence_number, m_ptr_WebServer->arg( i ).toInt() );
-    } else if( m_ptr_WebServer->argName( i ).startsWith( "mod_value_" ) ) {
-      sequence_number = m_ptr_WebServer->argName( i ).substring( 10 ).toInt();
-      this->ChannelModsUpdateForModValue( sequence_number, m_ptr_WebServer->arg( i ).toInt() );
+  for( int i = 0; i < m_WebServer.args(); i++ ) {
+    if( m_WebServer.argName( i ).startsWith( "mod_type_" ) ) {
+      sequence_number = m_WebServer.argName( i ).substring( 9 ).toInt();
+      m_ChannelModsHandler.UpdateForModType( sequence_number, m_WebServer.arg( i ).toInt() );
+    } else if( m_WebServer.argName( i ).startsWith( "mod_value_" ) ) {
+      sequence_number = m_WebServer.argName( i ).substring( 10 ).toInt();
+      m_ChannelModsHandler.UpdateForModValue( sequence_number, m_WebServer.arg( i ).toInt() );
     }
   }
 
   this->SettingsSave();
-
-  return true;
+  this->SendChannelModsForChannelSetupPage( m_WebServer.pathArg(0).toInt() );
 }
 
-void ConfigServer::ChannelModsAddMod( unsigned int channel_number, unsigned int mod_type, unsigned int mod_value ) {
-  ChannelMod mod;
-  mod.m_sequence = this->ChannelModsNextSequenceForChannel( channel_number ) + 1;
-  mod.m_channel = channel_number;
-  mod.m_mod_type = mod_type;
-  mod.m_mod_value = mod_value;
-  m_channel_mods_vector.push_back( mod );
-
-  this->ChannelModsSortBySequenceAndRenumber();
+void ConfigServer::HandleChannelModsEditFor() {
+  this->SendChannelModsForChannelSetupPage( m_WebServer.pathArg(0).toInt() );
 }
 
-void ConfigServer::ChannelModsRemoveMod( unsigned int sequence_number ) {
-  for( auto mods_itr = m_channel_mods_vector.begin(); mods_itr != m_channel_mods_vector.end(); ) {
-    if( mods_itr->m_sequence == sequence_number ) {
-      m_channel_mods_vector.erase( mods_itr );
+void ConfigServer::HandleChannelModsRemoveFor() {
+  m_ChannelModsHandler.RemoveAllForChannel( m_WebServer.pathArg(0).toInt() );
+
+  this->SettingsSave();
+  this->SendChannelModsSetupPage();
+}
+
+void ConfigServer::HandleChannelModsAddFor() {
+  unsigned int channel = m_WebServer.pathArg(0).toInt();
+  m_ChannelModsHandler.AddMod( channel, CHANNELMODTYPE::NOTHING, 0 );
+  this->SettingsSave();
+  this->SendChannelModsForChannelSetupPage( channel );
+}
+
+void ConfigServer::HandleChannelModsDelFor() {
+  unsigned int channel         = m_WebServer.pathArg(0).toInt();
+  unsigned int sequence_number = m_WebServer.pathArg(1).toInt();
+
+  m_ChannelModsHandler.RemoveMod( sequence_number );
+  this->SettingsSave();
+  this->SendChannelModsForChannelSetupPage( channel );
+}
+
+void ConfigServer::HandleWebServerDataOnNotFound() {
+  // Unhandled
+  m_WebServer.send( 200, "text/plain", "Not found!" );
+}
+
+void ConfigServer::HandleFileUpload() {
+  HTTPUpload& upload = m_WebServer.upload();
+
+  switch( upload.status ) {
+    case UPLOAD_FILE_START: {
+      String filename = "/" + upload.filename;
+      if( !filename.startsWith( "/" ) ) {
+        filename = "/" + filename;
+      }
+      Serial.printf( "File upload : Filename being received = '%s'\n", filename.c_str() );
+      m_file_being_uploaded = LittleFS.open( CONFIG_MODS, "w" ); //filename, "w" );
       break;
     }
-    ++mods_itr;
-  }
-  this->ChannelModsSortBySequenceAndRenumber();
-}
-
-void ConfigServer::ChannelModsSortBySequenceAndRenumber() {
-
-  // Sort
-  std::sort( m_channel_mods_vector.begin(), m_channel_mods_vector.end(), ChannelMod::CompareChannelModSequence );
-
-  // Re-Sequence
-  unsigned int sequence_new = 10;
-  for( auto& mod: m_channel_mods_vector ) {
-    mod.m_sequence = sequence_new;
-    sequence_new += 10;
-  }
-}
-
-void ConfigServer::ChannelModsUpdateForModType( unsigned int sequence_number, unsigned int mod_type ) {
-  for( auto& mod: m_channel_mods_vector ) {
-    if( mod.m_sequence == sequence_number ) {
-      mod.m_mod_type = mod_type;
+    case UPLOAD_FILE_WRITE: {
+      if( m_file_being_uploaded ) {
+        m_file_being_uploaded.write( upload.buf, upload.currentSize );
+      }
+      break;
+    }
+    case UPLOAD_FILE_END: {
+      if( m_file_being_uploaded ) {
+        m_file_being_uploaded.close();
+        this->SettingsLoad();
+        this->SendChannelModsSetupPage();
+      }
+      break;
+    }
+    case UPLOAD_FILE_ABORTED: {
+      if( m_file_being_uploaded ) {
+        m_file_being_uploaded.close();
+        LittleFS.remove( CONFIG_MODS );
+        Serial.printf( "File upload : Aborted. Mod config file deleted.\n" );
+      }
+      break;
+    }
+    default: {
+      Serial.printf( "File upload : Unknown status = %i\n", upload.status );
       break;
     }
   }
 }
 
-void ConfigServer::ChannelModsUpdateForModValue( unsigned int sequence_number, unsigned int mod_value ) {
-  for( auto& mod: m_channel_mods_vector ) {
-    if( mod.m_sequence == sequence_number ) {
-      mod.m_mod_value = mod_value;
-      break;
-    }
-  }
-}
-
-unsigned int ConfigServer::ChannelModsMaxSequence() {
-  unsigned int sequence_max = 0;
-
-  for( auto& mod: m_channel_mods_vector ) {
-    if( mod.m_sequence > sequence_max ) {
-      sequence_max = mod.m_sequence;
-    }
-  }
-
-  return sequence_max;
-}
-
-unsigned int ConfigServer::ChannelModsNextSequenceForChannel( unsigned int channel_number ) {
-  unsigned int sequence_max = 0;
-  unsigned int sequence_no_other = 1;
-
-  for( auto& mod: m_channel_mods_vector ) {
-    if( mod.m_channel == channel_number && mod.m_sequence > sequence_max ) {
-      sequence_max = mod.m_sequence;
-    } else if( mod.m_channel < channel_number ) {
-      sequence_no_other = mod.m_sequence + 1;
-    }
-  }
-
-  if( sequence_max == 0 ) {
-    return sequence_no_other;
-  }
-  return sequence_max;
-}
-
-void ConfigServer::ChannelModsRemoveAllForChannel( unsigned int channel_number ) {
-  for( auto mods_itr = m_channel_mods_vector.begin(); mods_itr != m_channel_mods_vector.end(); ) {
-    if( mods_itr->m_channel == channel_number ) {
-      m_channel_mods_vector.erase( mods_itr );
-      break;
-    }
-    ++mods_itr;
-  }
-  this->ChannelModsSortBySequenceAndRenumber();
-}
