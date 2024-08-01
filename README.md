@@ -111,6 +111,9 @@ Notes:
  - Added a button to enable or disable Art-Net data copy into the DMX data.  Art-Net data can now be assigned with the new mods into the DMX channels.
  - Added channel mod config download & upload.
 
+### Example of it in action (Click image to see it on YouTube)
+[![IMAGE ALT TEXT](https://img.youtube.com/vi/tCSSd6cs7N4/0.jpg)](https://www.youtube.com/watch?v=tCSSd6cs7N4 "ArtNet2DMX adapter test")
+
 # Art-Net
 
 Art-Net(tm) is a trademark of Artistic Licence Holdings Ltd. The Art-Net protocol and associated documentation is copyright Artistic Licence Holdings Ltd.
