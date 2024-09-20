@@ -150,17 +150,17 @@ void ESP32Artnet2DMX::CheckForArtNetData() {
   }
 }
 
-void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
+void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packet_artnet )
 {
-  uint16_t protocol = ptr_packetdmx->m_ProtocolLo | ptr_packetdmx->m_ProtocolHi << 8;
-  uint16_t universe_in = ptr_packetdmx->m_SubUni | ptr_packetdmx->m_Net << 8;
-  uint16_t number_of_channels = ptr_packetdmx->m_Length | ptr_packetdmx->m_LengthHi << 8;
+  uint16_t protocol = ptr_packet_artnet->m_ProtocolLo | ptr_packet_artnet->m_ProtocolHi << 8;
+  uint16_t universe_in = ptr_packet_artnet->m_SubUni | ptr_packet_artnet->m_Net << 8;
+  uint16_t number_of_channels = ptr_packet_artnet->m_Length | ptr_packet_artnet->m_LengthHi << 8;
 /*
   Serial.printf(" Target protocol = %i\n", ARTNET_VERSION );
-  Serial.printf(" Protocol = %i  Universe = %i  Sequence = %i  Nof channels = %i\n", protocol, universe_in, ptr_packetdmx->m_Sequence, number_of_channels );
+  Serial.printf(" Protocol = %i  Universe = %i  Sequence = %i  Nof channels = %i\n", protocol, universe_in, ptr_packet_artnet->m_Sequence, number_of_channels );
 
   for( int i = 0; i < number_of_channels; i++ ) {
-    Serial.print( ptr_packetdmx->m_Data[ i ], HEX );
+    Serial.print( ptr_packet_artnet->m_Data[ i ], HEX );
     Serial.print( " " );
   }
   Serial.print( "\n");
@@ -176,9 +176,9 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
   }
 
   // Note: m_dmx_buffer[ 0 ] must be 0x00 which is DMX null start code.  Actual dmx channel data will start at m_dmx_buffer[ 1 ]
-  //       ptr_packetdmx->m_Data[ 0 ] relates to first channel data, so the array needs to be adjusted.
+  //       ptr_packet_artnet->m_Data[ 0 ] relates to first channel data, so the array needs to be adjusted.
   if( m_ConfigServer.m_channel_mods_copy_artnet_to_dmx ) {
-    memcpy( &m_dmx_buffer[ 1 ], ptr_packetdmx->m_Data, number_of_channels * sizeof( uint8_t ) );
+    memcpy( &m_dmx_buffer[ 1 ], ptr_packet_artnet->m_Data, number_of_channels * sizeof( uint8_t ) );
   } else {
     memset( m_dmx_buffer, 0, sizeof( m_dmx_buffer ) );
   }
@@ -247,29 +247,29 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx )
           }
           break;
         }
-        case CHANNELMODTYPE::COPY_FROM_DMX: {
-          m_dmx_buffer[ mod.m_channel ] = ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+        case CHANNELMODTYPE::COPY_FROM_ARTNET: {
+          m_dmx_buffer[ mod.m_channel ] = ptr_packet_artnet->m_Data[ mod.m_mod_value - 1 ];
           break;
         }
-        case CHANNELMODTYPE::ADD_FROM_DMX: {
-          if( m_dmx_buffer[ mod.m_channel ] > 255 - ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ] ) {
+        case CHANNELMODTYPE::ADD_FROM_ARTNET: {
+          if( m_dmx_buffer[ mod.m_channel ] > 255 - ptr_packet_artnet->m_Data[ mod.m_mod_value - 1 ] ) {
             m_dmx_buffer[ mod.m_channel ] = 255;
           } else {
-            m_dmx_buffer[ mod.m_channel ] += ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+            m_dmx_buffer[ mod.m_channel ] += ptr_packet_artnet->m_Data[ mod.m_mod_value - 1 ];
           }
           break;
         }
-        case CHANNELMODTYPE::MINUS_FROM_DMX: {
-          if( m_dmx_buffer[ mod.m_channel ] < ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ] ) {
+        case CHANNELMODTYPE::MINUS_FROM_ARTNET: {
+          if( m_dmx_buffer[ mod.m_channel ] < ptr_packet_artnet->m_Data[ mod.m_mod_value - 1 ] ) {
             m_dmx_buffer[ mod.m_channel ] = 0;
           } else {
-            m_dmx_buffer[ mod.m_channel ] -= ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+            m_dmx_buffer[ mod.m_channel ] -= ptr_packet_artnet->m_Data[ mod.m_mod_value - 1 ];
           }
           break;
         }
-        case CHANNELMODTYPE::IF_0_ADD_FROM_DMX: {
+        case CHANNELMODTYPE::IF_0_ADD_FROM_ARTNET: {
           if( m_dmx_buffer[ mod.m_channel ] == 0 ) {
-            m_dmx_buffer[ mod.m_channel ] = ptr_packetdmx->m_Data[ mod.m_mod_value - 1 ];
+            m_dmx_buffer[ mod.m_channel ] = ptr_packet_artnet->m_Data[ mod.m_mod_value - 1 ];
           }
           break;
         }
