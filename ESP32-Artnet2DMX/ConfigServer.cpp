@@ -4,6 +4,14 @@
 ConfigServer::ConfigServer() {
   m_settings_changed     = false;
   m_is_connected_to_wifi = false;
+
+  // Start with config reset, except for WiFi
+  this->ResetESP32PinsToDefault();
+  this->ResetArtnet2DMXToDefault();
+  this->ResetChannelModsToDefault();
+
+  // No DMX output until config loaded
+  m_dmx_enabled = false;
 }
 
 ConfigServer::~ConfigServer() {
@@ -14,6 +22,7 @@ void ConfigServer::Init() {
   if( !this->SettingsLoad() ) {
     Serial.println( "Settings failed to load - Resetting to default." );
     this->ResetConfigToDefault();
+    this->SettingsSave();
   }
 
   m_settings_changed = true;
@@ -63,7 +72,6 @@ void ConfigServer::ResetArtnet2DMXToDefault() {
   m_artnet_source_ip       = "255.255.255.255";  // Any IP source is fine.
   m_artnet_universe        = 1;                  // Universe to listen for, all other universes are ignored.
   m_artnet_timeout_ms      = 3000;               // Artnet timeout
-  m_dmx_update_interval_ms = 23;                 // Roughly 4hz
 }
 
 void ConfigServer::SettingsSave() {
@@ -90,7 +98,6 @@ void ConfigServer::SettingsSave() {
   doc[ "artnet_source_ip" ]       = m_artnet_source_ip;
   doc[ "artnet_universe" ]        = m_artnet_universe;
   doc[ "artnet_timeout_ms" ]      = m_artnet_timeout_ms;
-  doc[ "dmx_update_interval_ms" ] = m_dmx_update_interval_ms;
   doc[ "dmx_enabled" ]            = m_dmx_enabled;
 
   File config_adapter = LittleFS.open( CONFIG_ADAPTER, "w" );
@@ -150,7 +157,6 @@ bool ConfigServer::SettingsLoad() {
   m_artnet_source_ip       = doc[ "artnet_source_ip" ].as<String>();
   m_artnet_universe        = doc[ "artnet_universe" ];
   m_artnet_timeout_ms      = doc[ "artnet_timeout_ms" ];
-  m_dmx_update_interval_ms = doc[ "dmx_update_interval_ms" ];
   m_dmx_enabled            = doc[ "dmx_enabled" ];
 
   // Clear out json
@@ -296,6 +302,7 @@ const std::vector< ChannelMod >& ConfigServer::GetModsVector() const {
 }
 
 void ConfigServer::SendSetupMenuPage() {
+
   m_WebpageBuilder.StartPage();
   m_WebpageBuilder.AddTitle( "Artnet2DMX Setup Page" );
   m_WebpageBuilder.StartBody();
@@ -442,10 +449,7 @@ void ConfigServer::SendArtnet2DMXSetupPage() {
   m_WebpageBuilder.AddBreak( 1 );
   m_WebpageBuilder.AddInputType( "number", "Art-Net timeout in ms", "artnet_timeout_ms", String( m_artnet_timeout_ms ), "", true );
   m_WebpageBuilder.AddBreak( 2 );
-  m_WebpageBuilder.AddLabel( "DMX update interval in ms", "DMX interval update in milliseconds.  Only change this if you know what you're doing." );
-  m_WebpageBuilder.AddBreak( 1 );
-  m_WebpageBuilder.AddInputType( "number", "DMX update interval in ms", "dmx_update_ms", String( m_dmx_update_interval_ms ), "", true );
-
+  
   // Submit button
   m_WebpageBuilder.AddBreak( 3 );
   m_WebpageBuilder.AddButton( "submit", "SUBMIT & SAVE" );
@@ -679,7 +683,7 @@ void ConfigServer::HandleDMXEnable() {
 }
 
 void ConfigServer::HandleDMXDisable() {
-    m_dmx_enabled = true;
+    m_dmx_enabled = false;
     this->SettingsSave();
     this->SendSetupMenuPage();
 }
@@ -757,8 +761,6 @@ void ConfigServer::HandleSetupArtnet2DMX() {
       m_artnet_source_ip = m_WebServer.arg( i );
     } else if( m_WebServer.argName( i ) == "artnet_universe" ) {
       m_artnet_universe = m_WebServer.arg( i ).toInt();
-    } else if( m_WebServer.argName( i ) == "dmx_update_ms" ) {
-      m_dmx_update_interval_ms = m_WebServer.arg( i ).toInt();
     } else if( m_WebServer.argName( i ) == "artnet_timeout_ms" ) {
       m_artnet_timeout_ms = m_WebServer.arg( i ).toInt();
     }

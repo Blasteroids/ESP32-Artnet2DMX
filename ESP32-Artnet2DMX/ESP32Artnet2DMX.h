@@ -7,7 +7,7 @@
 #include <vector>
 //
 #include <WiFi.h>   // WiFi Ref. : https://www.arduino.cc/reference/en/libraries/wifi/
-#include <esp_dmx.h>
+#include <esp_dmx.h>  // Ref. : https://github.com/someweisguy/esp_dmx
 //
 #include "ConfigServer.h"
 #include "ArtNet_Spec.h"
@@ -28,7 +28,11 @@ public:
 
   void Stop();
 
-private:  
+private:
+  void StartDMX();
+
+  void StopDMX();
+
   void SendDMX();
 
   void CheckForArtNetData();
@@ -38,8 +42,6 @@ private:
   bool          m_is_started;
   
   unsigned long m_artnet_timeout_next_ms;
-
-  unsigned long m_dmx_update_time_next_ms;
 
   uint8_t       m_data_buffer[ ARTNET_PACKET_MAXSIZE ];
 
