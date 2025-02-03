@@ -86,6 +86,10 @@ The 'Channel Mods' screen allow you to change the values that are sent to DMX us
 |Minus from Art-Net channel | Minuses the given Art-Net channel data from this DMX output channel |
 |If 0, add from Art-Net channel | If this current DMX channel data is zero, then adds the given Art-Net channel data into this DMX channel |
 
+Strobe effect
+A basic (fake) strobe effect has been added, but is limited by the 23ms DMX512 update interval.
+This can be assigned to multiple channels with unique values on each, or all set the same.
+The setup page "Strobe Config" is a little buggy, so if it doesn't load then hit refresh.
 
 Notes:
   - Channel mods are applied in channel order starting from channel 1.  So if you mod channel 1 and then copy channel 1 to channel 10, then channel 10 will also have the channel 1 mod applied.
@@ -111,6 +115,10 @@ Notes:
  - Added a button to enable or disable Art-Net data copy into the DMX data.  Art-Net data can now be assigned with the new mods into the DMX channels.
  - Added channel mod config download & upload.
 
+### Updated 3rd Jan 2025
+ - Fake limited strobe effect added.
+ - Small background improvements.
+ 
 ### Example of it in action (Click image to see it on YouTube)
 [![IMAGE ALT TEXT](https://img.youtube.com/vi/tCSSd6cs7N4/0.jpg)](https://www.youtube.com/watch?v=tCSSd6cs7N4 "ArtNet2DMX adapter test")
 

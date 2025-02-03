@@ -6,8 +6,11 @@ ESP32Artnet2DMX::ESP32Artnet2DMX() {
   memset( m_dmx_buffer, 0, sizeof( m_dmx_buffer ) );
 
   m_artnet_source_ipaddress_any.fromString( "255.255.255.255" );
+  
+  this->StrobeOff();
 
-  m_is_started     = false;
+  m_strobe_all_channels = false;
+  m_is_started          = false;
 }
 
 ESP32Artnet2DMX::~ESP32Artnet2DMX() {
@@ -24,6 +27,9 @@ void ESP32Artnet2DMX::Init() {
 
   // Startup the webserver.
   m_ConfigServer.StartWebServer();
+
+  // Create strobe buffer.
+  this->BuildStrobeBuffer();
 
   m_is_started = false;
 }
@@ -57,7 +63,10 @@ void ESP32Artnet2DMX::Stop() {
 
   m_WiFiUDP.stop();
 
-  m_is_started = false;
+  this->StrobeOff();
+
+  m_is_started          = false;
+
   return;
 }
 
@@ -68,9 +77,23 @@ bool ESP32Artnet2DMX::IsStarted() {
 void ESP32Artnet2DMX::Update() {
 
   if( m_ConfigServer.Update() ) {
-    // Settings have changed.
-    this->Stop();
-    this->Start();
+    
+    // Network changes, so restart everything.
+    if( m_ConfigServer.ChangedNetwork() ) {
+      this->Stop();
+      this->Start();
+    }
+    
+    // DMX config changed, relating to IO.
+    if( m_ConfigServer.ChangedDMXConfig() ) {
+      this->StopDMX();
+      this->StartDMX();
+    }
+
+    // Strobe config changed, so build the changed strobe buffer.
+    if( m_ConfigServer.ChangedStrobeConfig() ) {
+      this->BuildStrobeBuffer();
+    }
   }
 
   this->CheckForArtNetData();
@@ -152,6 +175,28 @@ void ESP32Artnet2DMX::HandleArtNetDMX( ArtNetPacketDMX* ptr_packet_artnet )
   // Is this the universe we are looking for?
   if( universe_in != m_ConfigServer.m_artnet_universe ) {
     return;
+  }
+
+  // Handle strobe from artnet packet.
+  if( m_ConfigServer.m_strobe_listening_channel > 0 ) {
+    if( ptr_packet_artnet->m_Data[ m_ConfigServer.m_strobe_listening_channel - 1 ] == 0 ) {
+      if( m_strobe_on ) {
+        this->StrobeOff();
+      }
+    } else {
+      for( int strobe_rate = 0; strobe_rate < 5; strobe_rate++ ) {
+        if( m_strobe_rate_current != strobe_rate &&
+            ptr_packet_artnet->m_Data[ m_ConfigServer.m_strobe_listening_channel - 1 ] == m_ConfigServer.m_strobe_value[ strobe_rate ] ) {
+          m_strobe_on                 = true;
+          m_strobe_rate_current       = strobe_rate;
+          m_strobe_value              = m_ConfigServer.m_strobe_value[ strobe_rate ];
+          m_strobe_delay              = m_ConfigServer.m_strobe_delay[ strobe_rate ];
+          m_strobe_duration           = m_ConfigServer.m_strobe_duration[ strobe_rate ];
+          m_strobe_delay_current      = 1;
+          m_strobe_duration_current   = 0;
+        }
+      }
+    }
   }
 
   // Note: m_dmx_buffer[ 0 ] must be 0x00 which is DMX null start code.  Actual dmx channel data will start at m_dmx_buffer[ 1 ]
@@ -280,7 +325,47 @@ void ESP32Artnet2DMX::SendDMX() {
   }
 
   if( dmx_wait_sent( DMX_NUM_1, 0 ) ) {
-    dmx_write( DMX_NUM_1, m_dmx_buffer, DMX_PACKET_SIZE );
+    if( m_strobe_on ) {
+      if( --m_strobe_delay_current == 0 ) {
+        m_strobe_delay_current    = m_strobe_delay;
+        m_strobe_duration_current = m_strobe_duration;
+      }
+      if( m_strobe_duration_current > 0 ) {
+        dmx_write( DMX_NUM_1, m_ConfigServer.m_strobe_buffer_on, DMX_PACKET_SIZE );
+        --m_strobe_duration_current;
+      } else {
+        dmx_write( DMX_NUM_1, m_ConfigServer.m_strobe_buffer_off, DMX_PACKET_SIZE );
+      }
+    } else {
+      dmx_write( DMX_NUM_1, m_dmx_buffer, DMX_PACKET_SIZE );
+    }
     dmx_send_num( DMX_NUM_1, DMX_PACKET_SIZE );
+  }
+}
+
+void ESP32Artnet2DMX::StrobeOff() {
+  m_strobe_on           = false;
+  m_strobe_rate_current = 5;
+  m_strobe_value        = 0;
+  m_strobe_delay        = 0;
+  m_strobe_duration     = 0;
+}
+
+void ESP32Artnet2DMX::BuildStrobeBuffer() {
+  if( m_strobe_on ) {
+    if( m_ConfigServer.m_strobe_listening_channel == 0 ) {
+      this->StrobeOff();
+    } else {
+      if( m_strobe_value != m_ConfigServer.m_strobe_value[ m_strobe_rate_current ] || 
+          m_strobe_delay != m_ConfigServer.m_strobe_delay[ m_strobe_rate_current ] || 
+          m_strobe_duration != m_ConfigServer.m_strobe_duration[ m_strobe_rate_current ] ) {
+        // The current on strobing effect has been changed.
+        m_strobe_value              = m_ConfigServer.m_strobe_value[ m_strobe_rate_current ];
+        m_strobe_delay              = m_ConfigServer.m_strobe_delay[ m_strobe_rate_current ];
+        m_strobe_duration           = m_ConfigServer.m_strobe_duration[ m_strobe_rate_current ];
+        m_strobe_delay_current      = m_strobe_delay;
+        m_strobe_duration_current   = m_strobe_duration;
+      }
+    }
   }
 }

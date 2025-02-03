@@ -2,13 +2,16 @@
 #include "ConfigServer.h"
 
 ConfigServer::ConfigServer() {
-  m_settings_changed     = false;
-  m_is_connected_to_wifi = false;
+  m_changed_network       = false;
+  m_changed_dmx_config    = false;
+  m_changed_strobe_config = false;
+  m_is_connected_to_wifi  = false;
 
   // Start with config reset, except for WiFi
   this->ResetESP32PinsToDefault();
   this->ResetArtnet2DMXToDefault();
   this->ResetChannelModsToDefault();
+  this->ResetStrobeConfigToDefault();
 
   // No DMX output until config loaded
   m_dmx_enabled = false;
@@ -25,7 +28,8 @@ void ConfigServer::Init() {
     this->SettingsSave();
   }
 
-  m_settings_changed = true;
+  m_changed_network      = true;
+  m_changed_dmx_config   = true;
 }
 
 void ConfigServer::ResetConfigToDefault() {
@@ -41,6 +45,7 @@ void ConfigServer::ResetConfigToDefault() {
   this->ResetESP32PinsToDefault();
   this->ResetArtnet2DMXToDefault();
   this->ResetChannelModsToDefault();
+  this->ResetStrobeConfigToDefault();
 
   // Disable DMX output
   m_dmx_enabled = false;
@@ -63,15 +68,28 @@ void ConfigServer::ResetESP32PinsToDefault() {
   m_gpio_receive     = 38;  // Ensure pin is not connected to anything.
 }
 
+void ConfigServer::ResetArtnet2DMXToDefault() {
+  m_artnet_source_ip       = "255.255.255.255";  // Any IP source is fine.
+  m_artnet_universe        = 1;                  // Universe to listen for, all other universes are ignored.
+  m_artnet_timeout_ms      = 3000;               // Artnet timeout
+}
+
 void ConfigServer::ResetChannelModsToDefault() {
   m_channel_mods_copy_artnet_to_dmx = true;
   m_ChannelModsHandler.Clear();
 }
 
-void ConfigServer::ResetArtnet2DMXToDefault() {
-  m_artnet_source_ip       = "255.255.255.255";  // Any IP source is fine.
-  m_artnet_universe        = 1;                  // Universe to listen for, all other universes are ignored.
-  m_artnet_timeout_ms      = 3000;               // Artnet timeout
+void ConfigServer::ResetStrobeConfigToDefault() {
+  m_strobe_listening_channel  = 0;       // 0 - No strobe
+  m_strobe_all_channels       = false;
+  m_strobe_all_channels_value = 126;
+  for( int i = 0; i < 5; i++ ) {
+    m_strobe_value[ i ] = i;
+    m_strobe_delay[ i ] = 0;
+    m_strobe_duration[ i ] = 0;
+  }
+  memset( m_strobe_buffer_on, 0, sizeof( m_strobe_buffer_on ) );
+  memset( m_strobe_buffer_off, 0, sizeof( m_strobe_buffer_off ) );
 }
 
 void ConfigServer::SettingsSave() {
@@ -99,6 +117,32 @@ void ConfigServer::SettingsSave() {
   doc[ "artnet_universe" ]        = m_artnet_universe;
   doc[ "artnet_timeout_ms" ]      = m_artnet_timeout_ms;
   doc[ "dmx_enabled" ]            = m_dmx_enabled;
+  
+  // Strobe
+  doc[ "strobe_listening_channel" ]  = m_strobe_listening_channel;
+  doc[ "strobe_all_channels" ]       = m_strobe_all_channels;
+  doc[ "strobe_all_channels_value" ] = m_strobe_all_channels_value;
+  doc[ "strobe_value_0" ]            = m_strobe_value[ 0 ];
+  doc[ "strobe_delay_0" ]            = m_strobe_delay[ 0 ];
+  doc[ "strobe_duration_0" ]         = m_strobe_duration[ 0 ];
+  doc[ "strobe_value_1" ]            = m_strobe_value[ 1 ];
+  doc[ "strobe_delay_1" ]            = m_strobe_delay[ 1 ];
+  doc[ "strobe_duration_1" ]         = m_strobe_duration[ 1 ];
+  doc[ "strobe_value_2" ]            = m_strobe_value[ 2 ];
+  doc[ "strobe_delay_2" ]            = m_strobe_delay[ 2 ];
+  doc[ "strobe_duration_2" ]         = m_strobe_duration[ 2 ];
+  doc[ "strobe_value_3" ]            = m_strobe_value[ 3 ];
+  doc[ "strobe_delay_3" ]            = m_strobe_delay[ 3 ];
+  doc[ "strobe_duration_3" ]         = m_strobe_duration[ 3 ];
+  doc[ "strobe_value_4" ]            = m_strobe_value[ 4 ];
+  doc[ "strobe_delay_4" ]            = m_strobe_delay[ 4 ];
+  doc[ "strobe_duration_4" ]         = m_strobe_duration[ 4 ];
+
+  // Strobe array
+  JsonArray array = doc.createNestedArray( "strobe_data" );
+  for( int i = 0; i < 513; ++i ) {
+    array.add( m_strobe_buffer_on[ i ] );
+  }
 
   File config_adapter = LittleFS.open( CONFIG_ADAPTER, "w" );
   serializeJson( doc, config_adapter );
@@ -123,8 +167,6 @@ void ConfigServer::SettingsSave() {
   File config_mods = LittleFS.open( CONFIG_MODS, "w" );
   serializeJson( doc, config_mods );
   config_mods.close();
-
-  m_settings_changed = true;
 }
 
 bool ConfigServer::SettingsLoad() {
@@ -158,6 +200,32 @@ bool ConfigServer::SettingsLoad() {
   m_artnet_universe        = doc[ "artnet_universe" ];
   m_artnet_timeout_ms      = doc[ "artnet_timeout_ms" ];
   m_dmx_enabled            = doc[ "dmx_enabled" ];
+
+  // Strobe
+  m_strobe_listening_channel  = doc[ "strobe_listening_channel" ];
+  m_strobe_all_channels       = doc[ "strobe_all_channels" ];
+  m_strobe_all_channels_value = doc[ "strobe_all_channels_value" ];
+  m_strobe_value[ 0 ]         = doc[ "strobe_value_0" ];
+  m_strobe_delay[ 0 ]         = doc[ "strobe_delay_0" ];
+  m_strobe_duration[ 0 ]      = doc[ "strobe_duration_0" ];
+  m_strobe_value[ 1 ]         = doc[ "strobe_value_1" ];
+  m_strobe_delay[ 1 ]         = doc[ "strobe_delay_1" ];
+  m_strobe_duration[ 1 ]      = doc[ "strobe_duration_1" ];
+  m_strobe_value[ 2 ]         = doc[ "strobe_value_2" ];
+  m_strobe_delay[ 2 ]         = doc[ "strobe_delay_2" ];
+  m_strobe_duration[ 2 ]      = doc[ "strobe_duration_2" ];
+  m_strobe_value[ 3 ]         = doc[ "strobe_value_3" ];
+  m_strobe_delay[ 3 ]         = doc[ "strobe_delay_3" ];
+  m_strobe_duration[ 3 ]      = doc[ "strobe_duration_3" ];
+  m_strobe_value[ 4 ]         = doc[ "strobe_value_4" ];
+  m_strobe_delay[ 4 ]         = doc[ "strobe_delay_4" ];
+  m_strobe_duration[ 4 ]      = doc[ "strobe_duration_4" ];
+
+  // Strobe array
+  JsonArray array = doc[ "strobe_data" ];
+  for( int i = 0; i < 513; ++i ) {
+    m_strobe_buffer_on[ i ] = array[ i ];
+  }
 
   // Clear out json
   doc.clear();
@@ -258,10 +326,12 @@ void ConfigServer::StartWebServer() {
   m_WebServer.on( "/reset_esp32pins", HTTP_GET, std::bind( &ConfigServer::HandleResetESP32Pins, this ) );
   m_WebServer.on( "/reset_artnew2dmx", HTTP_GET, std::bind( &ConfigServer::HandleResetArtnet2DMX, this ) );
   m_WebServer.on( "/reset_channelmods", HTTP_GET, std::bind( &ConfigServer::HandleResetChannelMods, this ) );
+  m_WebServer.on( "/reset_strobeconfig", HTTP_GET, std::bind( &ConfigServer::HandleResetStrobeConfig, this ) );
 
   m_WebServer.on( "/settings_wifi", HTTP_GET, std::bind( &ConfigServer::SendWiFiSetupPage, this ) );
   m_WebServer.on( "/settings_esp32pins", HTTP_GET, std::bind( &ConfigServer::SendESP32PinsSetupPage, this ) );
   m_WebServer.on( "/settings_artnet2dmx", HTTP_GET, std::bind( &ConfigServer::SendArtnet2DMXSetupPage, this ) );
+  m_WebServer.on( "/settings_strobeconfig", HTTP_GET, std::bind( &ConfigServer::SendStrobeConfigSetupPage, this ) );
   m_WebServer.on( "/settings_channelmods", HTTP_GET, std::bind( &ConfigServer::SendChannelModsSetupPage, this ) );
   m_WebServer.on( "/download", HTTP_GET, std::bind( &ConfigServer::SendModConfigFile, this ) ); // There's only 1 download, so ignoring filename.
 
@@ -275,6 +345,8 @@ void ConfigServer::StartWebServer() {
   m_WebServer.on( "/setup_esp32pins", HTTP_POST, std::bind( &ConfigServer::HandleSetupESP32Pins, this ) );
   m_WebServer.on( "/setup_artnet2dmx", HTTP_POST, std::bind( &ConfigServer::HandleSetupArtnet2DMX, this ) );
   m_WebServer.on( "/setup_channelmods", HTTP_POST, std::bind( &ConfigServer::HandleSetupChannelMods, this ) );
+  m_WebServer.on( "/setup_strobeconfig", HTTP_POST, std::bind( &ConfigServer::HandleSetupStrobeConfig, this ) );
+  m_WebServer.on( "/setup_strobechannels", HTTP_POST, std::bind( &ConfigServer::HandleSetupStrobeChannels, this ) );
   
   m_WebServer.on( UriBraces("/setup_channelmodsfor/{}"), HTTP_POST, std::bind( &ConfigServer::HandleSetupChannelModsForChannel, this ) );
   m_WebServer.on( UriBraces("/mods_editfor/{}"), HTTP_POST, std::bind( &ConfigServer::HandleChannelModsEditFor, this ) );
@@ -287,14 +359,29 @@ void ConfigServer::StartWebServer() {
 
 bool ConfigServer::Update() {
 
+  m_changed_network       = false;
+  m_changed_dmx_config    = false;
+  m_changed_strobe_config = false;
+
   m_WebServer.handleClient();
 
-  if( m_settings_changed ) {
-    m_settings_changed = false;
+  if( m_changed_network | m_changed_dmx_config | m_changed_strobe_config ) {
     return true;
   }
 
   return false;
+}
+
+bool ConfigServer::ChangedNetwork() {
+  return m_changed_network;
+}
+
+bool ConfigServer::ChangedDMXConfig() {
+  return m_changed_dmx_config;
+}
+
+bool ConfigServer::ChangedStrobeConfig() {
+  return m_changed_strobe_config;
 }
 
 const std::vector< ChannelMod >& ConfigServer::GetModsVector() const {
@@ -316,6 +403,8 @@ void ConfigServer::SendSetupMenuPage() {
   m_WebpageBuilder.AddButtonActionForm( "settings_esp32pins", "ESP32 Pins" );
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddButtonActionForm( "settings_artnet2dmx", "Art-Net 2 DMX" );
+  m_WebpageBuilder.AddBreak( 2 );
+  m_WebpageBuilder.AddButtonActionForm( "settings_strobeconfig", "Strobe Config" );
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddButtonActionForm( "settings_channelmods", "Channel Mods" );
 
@@ -353,7 +442,7 @@ void ConfigServer::SendWiFiSetupPage() {
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddFormAction( "/setup_wifi", "POST" );
   m_WebpageBuilder.AddLabel( "wifi_ssid", "WiFi ssid : " );
-  m_WebpageBuilder.AddInputType( "text", "wifi_ssid", "wifi_ssid", "", "", true );
+  m_WebpageBuilder.AddInputType( "text", "wifi_ssid", "wifi_ssid", m_wifi_ssid, "", true );
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddLabel( "wifi_pass", "Password : " );
   m_WebpageBuilder.AddInputType( "password", "wifi_pass", "wifi_pass", "", "", true );
@@ -490,7 +579,7 @@ void ConfigServer::SendChannelModsSetupPage() {
   m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddLabel( "Channel Mods", "Select channel to setup." );
   m_WebpageBuilder.AddBreak( 1 );
-  m_WebpageBuilder.AddSelectorNumberList( "channel", "Select channel", 1, 512, 1 );
+  m_WebpageBuilder.AddSelectorNumberList( "channel", "Select channel", 1, 512, 1, 1 );
 
   // Submit button
   m_WebpageBuilder.AddBreak( 3 );
@@ -638,6 +727,114 @@ void ConfigServer::SendModConfigFile() {
   }  
 }
 
+void ConfigServer::SendStrobeConfigSetupPage() {
+  m_WebpageBuilder.StartPage();
+  m_WebpageBuilder.AddTitle( "Artnet2DMX Setup Page" );
+  m_WebpageBuilder.StartBody();
+  m_WebpageBuilder.StartCenter();
+  m_WebpageBuilder.AddHeading( "Strobe Config Setup" );
+
+  m_WebpageBuilder.AddBreak( 2 );
+  m_WebpageBuilder.AddLabel( "pageinfo", "This page is tempramental, just hit refresh if not showing correctly." );
+  m_WebpageBuilder.AddBreak( 2 );
+  m_WebpageBuilder.AddLabel( "info", "Note: Very limited strobe effect by switching DMX512 channels on & off." );
+  m_WebpageBuilder.AddBreak( 1 );
+  m_WebpageBuilder.AddLabel( "info2", "Since each DMX512 update is ~23ms, then timings can only be done in ~23ms intervals." );
+  m_WebpageBuilder.AddBreak( 1 );
+  m_WebpageBuilder.AddLabel( "info3", "Set Channel In to 0 to disable this strobe effect." );
+  m_WebpageBuilder.AddBreak( 3 );
+
+  m_WebpageBuilder.AddGridStyle( "grid-container4", 4 );
+  m_WebpageBuilder.AddFormAction( "/strobe_config", "POST" );
+  m_WebpageBuilder.StartDivClass( "grid-container4" );
+
+  // 
+  m_WebpageBuilder.AddGridCellText( "ArtNet Channel In" );
+  m_WebpageBuilder.AddGridCellText( "Strobe All DMX Channels?" );
+  m_WebpageBuilder.AddGridCellText( "DMX Value Out" );
+  m_WebpageBuilder.AddGridCellText( "" );
+
+  m_WebpageBuilder.AddGridEntryNumberCell( "channel", m_strobe_listening_channel, 0, 512, true );
+  m_WebpageBuilder.AddSelector2Items( "all","","No", "Yes", !m_strobe_all_channels );
+  m_WebpageBuilder.AddGridEntryNumberCell( "value", m_strobe_all_channels_value, 1, 255, true );
+  m_WebpageBuilder.AddGridCellText( "" );
+
+  // Gap
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+
+  //
+  m_WebpageBuilder.AddGridCellText( "Strobe" );
+  m_WebpageBuilder.AddGridCellText( "ArtNet Value In" );
+  m_WebpageBuilder.AddGridCellText( "Delay" );
+  m_WebpageBuilder.AddGridCellText( "Duration" );
+
+  for( int i = 1; i < 5; ++i ) {
+    m_WebpageBuilder.AddGridCellText( String( i ) );
+    m_WebpageBuilder.AddGridEntryNumberCell( "value_" + String( i ), m_strobe_value[ i ], 1, 255, true );
+    m_WebpageBuilder.AddSelectorNumberList( "delay_" + String( i ), "delay", 23, 989, 23, m_strobe_delay[ i ] * 23 );
+    m_WebpageBuilder.AddSelectorNumberList( "duration_" + String( i ), "duration", 23, 989, 23, m_strobe_duration[ i ] * 23 );
+  }
+
+  // Gap
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+
+  // Submit button
+  m_WebpageBuilder.AddButtonAction( "/setup_strobeconfig", "SAVE" );
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+  m_WebpageBuilder.AddGridCellText( "" );
+
+  m_WebpageBuilder.EndFormAction();
+  m_WebpageBuilder.EndDiv();
+
+  // Cancel button
+  m_WebpageBuilder.AddBreak( 3 );
+  m_WebpageBuilder.AddButtonActionForm( "/", "RETURN TO MAIN MENU" );
+
+  // Reset button
+  m_WebpageBuilder.AddBreak( 3 );
+  m_WebpageBuilder.AddButtonActionForm( "/reset_strobeconfig", "RESET STROBE CONFIG TO DEFAULT" );
+
+  // Info
+  m_WebpageBuilder.AddBreak( 3 );
+  m_WebpageBuilder.AddLabel( "info4", "Below each channel can be assigned different values on strobe." );
+  m_WebpageBuilder.AddBreak( 1 );
+  m_WebpageBuilder.AddLabel( "info5", "Note: Click SAVE at the very bottom of the page if you change values." );
+  m_WebpageBuilder.AddBreak( 3 );
+
+  // Individual channel data
+  m_WebpageBuilder.AddGridStyle( "grid-container2", 2 );
+  m_WebpageBuilder.AddFormAction( "/strobe_channels", "POST" );
+  m_WebpageBuilder.StartDivClass( "grid-container2" );
+
+  m_WebpageBuilder.AddGridCellText( "DMX Channel Out" );
+  m_WebpageBuilder.AddGridCellText( "DMX Value Out" );
+
+  for( int i = 1; i < 513; ++i ) {
+    m_WebpageBuilder.AddGridCellText( String( i ) );
+    m_WebpageBuilder.AddGridEntryNumberCell( "scv_" + String( i ), m_strobe_buffer_on[ i ], 1, 255, true );
+  }
+  m_WebpageBuilder.AddButtonAction( "/setup_strobechannels", "SAVE" );
+  m_WebpageBuilder.AddGridCellText( "" );
+
+  m_WebpageBuilder.EndFormAction();
+  m_WebpageBuilder.EndDiv();
+
+  m_WebpageBuilder.AddBreak( 3 );
+
+  m_WebpageBuilder.EndCenter();
+  m_WebpageBuilder.EndBody();
+  m_WebpageBuilder.EndPage();
+
+  m_WebServer.send( 200, "text/html", m_WebpageBuilder.m_html );
+}
+
 void ConfigServer::Send200Response() {
   m_WebServer.send( 200 );
 }
@@ -648,6 +845,9 @@ void ConfigServer::HandleResetAll() {
   this->ResetConfigToDefault();
   this->SettingsSave();
   this->ConnectToWiFi();
+  m_changed_network       = true;
+  m_changed_dmx_config    = true;
+  m_changed_strobe_config = true;
 }
 
 void ConfigServer::HandleResetWiFi() {
@@ -656,12 +856,14 @@ void ConfigServer::HandleResetWiFi() {
   this->ResetWiFiToDefault();
   this->SettingsSave();
   this->ConnectToWiFi();
+  m_changed_network = true;
 }
 
 void ConfigServer::HandleResetESP32Pins() {
   this->ResetESP32PinsToDefault();
   this->SettingsSave();
   this->SendESP32PinsSetupPage();
+  m_changed_dmx_config = true;
 }
 
 void ConfigServer::HandleResetArtnet2DMX() {
@@ -676,16 +878,22 @@ void ConfigServer::HandleResetChannelMods() {
   this->SendChannelModsSetupPage();
 }
 
+void ConfigServer::HandleResetStrobeConfig() {
+  this->ResetStrobeConfigToDefault();
+  this->SettingsSave();
+  this->SendStrobeConfigSetupPage();
+}
+
 void ConfigServer::HandleDMXEnable() {
-    m_dmx_enabled = true;
-    this->SettingsSave();
-    this->SendSetupMenuPage();
+  m_dmx_enabled = true;
+  this->SettingsSave();
+  this->SendSetupMenuPage();
 }
 
 void ConfigServer::HandleDMXDisable() {
-    m_dmx_enabled = false;
-    this->SettingsSave();
-    this->SendSetupMenuPage();
+  m_dmx_enabled = false;
+  this->SettingsSave();
+  this->SendSetupMenuPage();
 }
 
 void ConfigServer::HandleCopyArtnetToDMXEnable() {
@@ -733,10 +941,8 @@ void ConfigServer::HandleSetupWiFi() {
     if( this->ConnectToWiFi() ) {
       this->SettingsSave();
     }
-
-    Serial.printf( "Restarting WiFi\n" );
-    this->ConnectToWiFi();
   }
+  m_changed_network = true;
 }
 
 void ConfigServer::HandleSetupESP32Pins() {  
@@ -753,6 +959,7 @@ void ConfigServer::HandleSetupESP32Pins() {
 
   this->SettingsSave();
   this->SendSetupMenuPage();
+  m_changed_dmx_config  = true;
 }
 
 void ConfigServer::HandleSetupArtnet2DMX() {  
@@ -871,3 +1078,92 @@ void ConfigServer::HandleFileUpload() {
   }
 }
 
+void ConfigServer::HandleSetupStrobeConfig() {
+  bool has_changed = false;
+  int strobe_rate;
+  int tmp_i;
+  for( int i = 0; i < m_WebServer.args(); i++ ) {
+    if( m_WebServer.argName( i ) == "channel" ) {
+      tmp_i = m_WebServer.arg( i ).toInt();
+      if( tmp_i != m_strobe_listening_channel ) {
+        m_strobe_listening_channel = tmp_i;
+        has_changed = true;
+      }
+    } else if ( m_WebServer.argName( i ) == "all" ) {
+      if( m_WebServer.arg( i ) == "Yes" ) {
+        if( !m_strobe_all_channels ) {
+          memset( m_strobe_buffer_on, m_strobe_all_channels_value, sizeof( m_strobe_buffer_on ) );
+          m_strobe_buffer_on[ 0 ] = 0;
+          m_strobe_all_channels = true;
+          has_changed = true;
+        }
+      } else if( m_strobe_all_channels ) {
+        memset( m_strobe_buffer_on, 0, sizeof( m_strobe_buffer_on ) );
+        m_strobe_all_channels = false;
+        has_changed = true;
+      }
+    } else if ( m_WebServer.argName( i ) == "value" ) {
+      tmp_i = m_WebServer.arg( i ).toInt();
+      if( tmp_i != m_strobe_all_channels_value ) {
+        m_strobe_all_channels_value = tmp_i;
+        if( m_strobe_all_channels ) {
+          memset( m_strobe_buffer_on, m_strobe_all_channels_value, sizeof( m_strobe_buffer_on ) );
+          m_strobe_buffer_on[ 0 ] = 0;
+        }
+        has_changed = true;
+      }
+    } else if( m_WebServer.argName( i ).startsWith( "value_" ) ) {
+      strobe_rate = m_WebServer.argName( i ).substring( 6 ).toInt();
+      tmp_i = m_WebServer.arg( i ).toInt();
+      if( m_strobe_value[ strobe_rate ] != tmp_i ) {
+        m_strobe_value[ strobe_rate] = tmp_i;
+        has_changed = true;
+      }
+    } else if( m_WebServer.argName( i ).startsWith( "delay_" ) ) {
+      strobe_rate = m_WebServer.argName( i ).substring( 6 ).toInt();
+      tmp_i = m_WebServer.arg( i ).toInt() / 23;
+      if( m_strobe_delay[ strobe_rate ] != tmp_i ) {
+        m_strobe_delay[ strobe_rate] = tmp_i;
+        has_changed = true;
+      }
+    } else if( m_WebServer.argName( i ).startsWith( "duration_" ) ) {
+      strobe_rate = m_WebServer.argName( i ).substring( 9 ).toInt();
+      tmp_i = m_WebServer.arg( i ).toInt() / 23;
+      if( m_strobe_duration[ strobe_rate ] != tmp_i ) {
+        m_strobe_duration[ strobe_rate] = tmp_i;
+        has_changed = true;
+      }
+    }
+  }
+
+  if( has_changed ) {
+    this->SettingsSave();
+    m_changed_strobe_config = true;
+  }
+
+  this->SendStrobeConfigSetupPage();
+}
+
+void ConfigServer::HandleSetupStrobeChannels() {
+  bool has_changed = false;
+  int channel_number;
+  int channel_value;
+  for( int i = 0; i < m_WebServer.args(); i++ ) {
+    if( m_WebServer.argName( i ).startsWith( "scv_" ) ) {
+      channel_number = m_WebServer.argName( i ).substring( 4 ).toInt();
+      if( channel_number > 0 && channel_number < 513 ) {
+        channel_value =  m_WebServer.arg( i ).toInt();      
+        if( channel_value < 256 && m_strobe_buffer_on[ channel_number ] != channel_value ) {
+           m_strobe_buffer_on[ channel_number ] = channel_value;
+           has_changed = true;
+        }
+      }
+    }
+  }
+
+  if( has_changed ) {    
+    this->SettingsSave();
+  }
+
+  this->SendStrobeConfigSetupPage();
+}

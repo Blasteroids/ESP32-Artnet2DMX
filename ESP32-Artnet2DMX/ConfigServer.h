@@ -34,7 +34,12 @@ public:
 
   // Returns true if settings have changed.
   bool Update();
-  
+
+  // Indicates which section has been changed.
+  bool ChangedNetwork();
+  bool ChangedDMXConfig();
+  bool ChangedStrobeConfig();
+
   // WiFi settings
   String m_wifi_ssid;
   String m_wifi_pass;
@@ -50,13 +55,22 @@ public:
   String          m_artnet_source_ip;        // The IP that we're expecting data from.  Use 255.255.255.255 for any.
   int             m_artnet_universe;         // Universe to listen for, all other universes are ignored.  Default = 1
   unsigned long   m_artnet_timeout_ms;       // When no artnet data has been received by this amount of ms then turn off all dmx.  Default = 2000.  Use -1 for no timeout.
-  bool            m_dmx_enabled;             // Enable/Disable dmx output.
+  bool            m_dmx_enabled;             // Enable/Disable dmx output. 
 
   // DMX channel mods
   bool m_channel_mods_copy_artnet_to_dmx;
 
   const std::vector< ChannelMod >& GetModsVector() const;
 
+  // Strobe : 5 different rates.  DMX512 takes ~23ms to update, so delay & duration is stored as DMX frames where each frame is 1 DMX512 update = roughly 23ms.
+  uint8_t m_strobe_listening_channel;  // The ArtNet input channel to listen for strobe values on.
+  bool    m_strobe_all_channels;       // Use all channels.
+  uint8_t m_strobe_all_channels_value; // Value to set the strobe values to.
+  uint8_t m_strobe_value[ 5 ];         // The value in the channel that switchs on the strobe effect.
+  uint8_t m_strobe_delay[ 5 ];         // The delay between strobe flashes.  1 = ~23ms  2 = ~46ms...
+  uint8_t m_strobe_duration[ 5 ];      // The duration that the strobe light stays on for. 1 = ~23ms  2 = ~46ms...
+  uint8_t m_strobe_buffer_on[ 513 ];   // The dmx buffer for strobe on.  [0] must be 0, [1]-[512] are the channels.
+  uint8_t m_strobe_buffer_off[ 513 ];  // THe dmx buffer for strobe off. [0] must be 0, [1]-[512] are the channels.
 
 private:
   void ResetConfigToDefault();
@@ -64,6 +78,7 @@ private:
   void ResetESP32PinsToDefault();
   void ResetArtnet2DMXToDefault();  
   void ResetChannelModsToDefault();
+  void ResetStrobeConfigToDefault();
 
   void SettingsSave();
   bool SettingsLoad();
@@ -75,6 +90,7 @@ private:
   void SendChannelModsSetupPage();
   void SendChannelModsForChannelSetupPage( int channel_number );
   void SendModConfigFile();
+  void SendStrobeConfigSetupPage();
   void Send200Response();
 
   void HandleResetAll();
@@ -82,6 +98,7 @@ private:
   void HandleResetESP32Pins();
   void HandleResetArtnet2DMX();
   void HandleResetChannelMods();
+  void HandleResetStrobeConfig();
 
   void HandleDMXEnable();
   void HandleDMXDisable();
@@ -97,6 +114,9 @@ private:
   void HandleChannelModsRemoveFor();
   void HandleChannelModsAddFor();
   void HandleChannelModsDelFor();
+  
+  void HandleSetupStrobeConfig();
+  void HandleSetupStrobeChannels();
 
   void HandleWebServerDataOnNotFound();
 
@@ -105,7 +125,9 @@ private:
   WebServer          m_WebServer;
   WebpageBuilder     m_WebpageBuilder;
   String             m_mac_address;
-  bool               m_settings_changed;
+  bool               m_changed_network;
+  bool               m_changed_dmx_config;
+  bool               m_changed_strobe_config;
   bool               m_is_connected_to_wifi;
   File               m_file_being_uploaded;
   ChannelModsHandler m_ChannelModsHandler;

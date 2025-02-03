@@ -39,6 +39,10 @@ private:
 
   void HandleArtNetDMX( ArtNetPacketDMX* ptr_packetdmx );
 
+  void StrobeOff();
+
+  void BuildStrobeBuffer();
+
   bool          m_is_started;
   
   unsigned long m_artnet_timeout_next_ms;
@@ -54,6 +58,16 @@ private:
 
   IPAddress     m_artnet_source_ipaddress;
   IPAddress     m_artnet_source_ipaddress_any;
+
+  // Strobe
+  bool     m_strobe_on;
+  bool     m_strobe_all_channels;
+  uint8_t  m_strobe_rate_current;
+  uint8_t  m_strobe_value;
+  uint8_t  m_strobe_delay;
+  uint8_t  m_strobe_delay_current;
+  uint8_t  m_strobe_duration;
+  uint8_t  m_strobe_duration_current;
 };
 
 #endif

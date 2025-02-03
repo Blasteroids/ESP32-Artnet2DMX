@@ -194,10 +194,10 @@ void WebpageBuilder::AddSelector2Items( const String& name, const String& id, co
   m_html += ">" + option2 + "</option></select>";
 }
 
-void WebpageBuilder::AddSelectorNumberList( const String& name, const String& id, const int number_low, const int number_high, const int number_selected ) {
+void WebpageBuilder::AddSelectorNumberList( const String& name, const String& id, const int number_low, const int number_high, const int step, const int number_selected ) {
   m_html += "<select name=\"" + name + "\" id=\"" + id + "\">";
 
-  for( int i = number_low; i <= number_high; i++ ) {
+  for( int i = number_low; i <= number_high; i += step ) {
     m_html += "<option value=\"" + String( i ) + "\"";
     if( i == number_selected ) {
       m_html += " selected";
