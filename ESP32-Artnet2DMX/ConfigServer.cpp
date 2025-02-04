@@ -735,8 +735,6 @@ void ConfigServer::SendStrobeConfigSetupPage() {
   m_WebpageBuilder.AddHeading( "Strobe Config Setup" );
 
   m_WebpageBuilder.AddBreak( 2 );
-  m_WebpageBuilder.AddLabel( "pageinfo", "This page is tempramental, just hit refresh if not showing correctly." );
-  m_WebpageBuilder.AddBreak( 2 );
   m_WebpageBuilder.AddLabel( "info", "Note: Very limited strobe effect by switching DMX512 channels on & off." );
   m_WebpageBuilder.AddBreak( 1 );
   m_WebpageBuilder.AddLabel( "info2", "Since each DMX512 update is ~23ms, then timings can only be done in ~23ms intervals." );

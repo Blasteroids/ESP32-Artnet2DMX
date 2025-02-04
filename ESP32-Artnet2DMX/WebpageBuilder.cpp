@@ -1,6 +1,7 @@
 #include "WebpageBuilder.h"
 
 WebpageBuilder::WebpageBuilder() {
+  m_html.reserve( 95000 );
 }
 
 WebpageBuilder::~WebpageBuilder() {
